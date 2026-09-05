@@ -1,0 +1,29 @@
+{
+  "name": "@crea/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Builder hybride Crea : Astro + React + Zustand.",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "typecheck": "astro check"
+  },
+  "dependencies": {
+    "@astrojs/react": "^6.0.5",
+    "@crea/schema": "*",
+    "@tailwindcss/vite": "^4.3.3",
+    "astro": "^7.3.1",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "tailwindcss": "^4.3.3",
+    "zustand": "^5.0.15"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.4",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "typescript": "5.9.3"
+  }
+}

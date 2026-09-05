@@ -1,0 +1,27 @@
+{
+  "name": "@crea/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "API serverless Crea sur Cloudflare Workers (Hono + D1 + R2 + Anthropic).",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "tsc src/lib/sigv4.ts src/lib/crypto.ts --outDir dist-test --rootDir src --module esnext --target es2022 --moduleResolution bundler --lib es2023,dom --skipLibCheck && node --test test/*.test.mjs",
+    "db:create": "wrangler d1 create crea",
+    "db:migrate:local": "wrangler d1 migrations apply crea --local",
+    "db:migrate:remote": "wrangler d1 migrations apply crea --remote",
+    "db:seed:local": "wrangler d1 execute crea --local --file=./seeds/dev.sql"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.124.0",
+    "@crea/schema": "*",
+    "hono": "^4.13.7"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260905.1",
+    "typescript": "5.9.3",
+    "wrangler": "^4.129.0"
+  }
+}

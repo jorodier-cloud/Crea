@@ -1,0 +1,10 @@
+---
+import { ProjectList } from '../components/projects/ProjectList';
+import Base from '../layouts/Base.astro';
+---
+
+<Base title="Mes projets — Crea">
+  <main>
+    <ProjectList client:only="react" />
+  </main>
+</Base>

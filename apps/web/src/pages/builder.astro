@@ -1,0 +1,8 @@
+---
+import { BuilderPage } from '../components/builder/BuilderPage';
+import Base from '../layouts/Base.astro';
+---
+
+<Base title="Builder — Crea" fullHeight>
+  <BuilderPage client:only="react" />
+</Base>

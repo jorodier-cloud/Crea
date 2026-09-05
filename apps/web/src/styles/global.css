@@ -1,0 +1,101 @@
+@import 'tailwindcss';
+
+/* Charte : vert sauge, beige lin, vert fonce, blanc casse, accents dores. */
+@theme {
+  --color-sage: #9caf88;
+  --color-sage-soft: #cbd8bd;
+  --color-linen: #efe8da;
+  --color-forest: #2f4132;
+  --color-forest-soft: #46604a;
+  --color-offwhite: #faf7f0;
+  --color-gold: #c2a15a;
+  --color-ink: #1f2420;
+  --color-muted: #6b7169;
+  --color-line: #e3ded2;
+
+  --font-display: 'Cormorant Garamond', Georgia, serif;
+}
+
+@layer base {
+  html,
+  body {
+    height: 100%;
+  }
+
+  body {
+    background-color: var(--color-offwhite);
+    color: var(--color-ink);
+    font-family:
+      ui-sans-serif,
+      system-ui,
+      -apple-system,
+      'Segoe UI',
+      sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+@layer components {
+  .crea-panel {
+    background-color: #ffffff;
+    border-color: var(--color-line);
+  }
+
+  .crea-input {
+    width: 100%;
+    border-radius: 8px;
+    border: 1px solid var(--color-line);
+    background-color: #ffffff;
+    padding: 7px 10px;
+    font-size: 13px;
+    color: var(--color-ink);
+  }
+
+  .crea-input:focus {
+    outline: 2px solid var(--color-sage);
+    outline-offset: -1px;
+  }
+
+  .crea-label {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+  }
+
+  .crea-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    border-radius: 999px;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    transition: opacity 0.15s ease;
+  }
+
+  .crea-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  .crea-btn-primary {
+    background-color: var(--color-forest);
+    color: #ffffff;
+  }
+
+  .crea-btn-ghost {
+    border: 1px solid var(--color-line);
+    background-color: #ffffff;
+    color: var(--color-ink);
+  }
+}
+
+/* Zone de rendu du site en construction. */
+.crea-canvas-frame *::selection {
+  background-color: var(--color-sage-soft);
+}

@@ -1,0 +1,10 @@
+---
+import { LoginForm } from '../components/auth/LoginForm';
+import Base from '../layouts/Base.astro';
+---
+
+<Base title="Connexion — Crea">
+  <main class="flex min-h-screen items-center justify-center px-6">
+    <LoginForm client:only="react" />
+  </main>
+</Base>

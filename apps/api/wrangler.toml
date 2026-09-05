@@ -1,0 +1,52 @@
+name = "crea-api"
+main = "src/index.ts"
+compatibility_date = "2026-01-15"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+# --------------------------------------------------------------------------
+# Variables publiques (non secretes).
+# --------------------------------------------------------------------------
+[vars]
+ENVIRONMENT = "development"
+# Origines autorisees par le CORS, separees par des virgules.
+APP_ORIGINS = "http://localhost:4321"
+# Base publique servant les objets R2 (domaine personnalise ou r2.dev).
+R2_PUBLIC_BASE_URL = "http://localhost:8787/api/media/file"
+# Compte Cloudflare, requis pour signer les URL S3 de R2.
+R2_ACCOUNT_ID = ""
+R2_BUCKET_NAME = "crea-media"
+ANTHROPIC_MODEL = "claude-opus-5"
+# Solde offert a la creation d un compte (doit rester aligne sur le DEFAULT D1).
+SIGNUP_IA_POINTS = "1000"
+
+# --------------------------------------------------------------------------
+# Base de donnees D1.
+#   npx wrangler d1 create crea       -> copier le database_id ci-dessous
+#   npm run db:migrate:local
+# --------------------------------------------------------------------------
+[[d1_databases]]
+binding = "DB"
+database_name = "crea"
+database_id = "00000000-0000-0000-0000-000000000000" # remplacer par l id renvoye par `wrangler d1 create crea`
+migrations_dir = "migrations"
+
+# --------------------------------------------------------------------------
+# Stockage objet R2.
+#   npx wrangler r2 bucket create crea-media
+# --------------------------------------------------------------------------
+[[r2_buckets]]
+binding = "MEDIA_BUCKET"
+bucket_name = "crea-media"
+
+# --------------------------------------------------------------------------
+# Secrets (jamais dans ce fichier) :
+#   npx wrangler secret put SESSION_SECRET
+#   npx wrangler secret put ANTHROPIC_API_KEY
+#   npx wrangler secret put R2_ACCESS_KEY_ID
+#   npx wrangler secret put R2_SECRET_ACCESS_KEY
+# En local, les memes cles se declarent dans .dev.vars (voir .dev.vars.example).
+# --------------------------------------------------------------------------
+
+[observability]
+enabled = true

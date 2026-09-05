@@ -141,3 +141,18 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# --- Crea ---
+# Secrets locaux du Worker (wrangler dev)
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+
+# Etat local de wrangler (D1, R2, KV simules)
+.wrangler/
+
+# Sorties de build
+apps/web/dist/
+apps/web/.astro/
+packages/schema/dist/
+apps/api/dist-test/
