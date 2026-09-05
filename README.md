@@ -307,6 +307,9 @@ npm test --workspace @crea/api    # signature SigV4
 | AST (12 tests) | insertion refusee sur une feuille, fusion des styles par famille, refus du deplacement dans un descendant, duplication avec ids frais, ids dupliques reattribues, type inconnu rejete, parsing IA tolerant, echappement HTML, neutralisation des URL `javascript:`, rendu deterministe |
 | SigV4 (3 tests) | **vecteur de test officiel AWS reproduit a l'identique**, encodage des cles, borne des 7 jours |
 
+La CI (`.github/workflows/ci.yml`) rejoue `typecheck`, `test` et `build` sur
+chaque pull request et sur `main`, depuis une installation propre.
+
 Verification manuelle effectuee sur `wrangler dev` : magic link a usage unique,
 401 sans session, CRUD projets, rejet d'un arbre invalide, pipeline media
 complet, refus d'une cle appartenant a un autre compte, 402 sur solde nul.
