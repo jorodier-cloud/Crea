@@ -109,7 +109,8 @@ Sans cles S3, l'upload bascule automatiquement sur `/api/media/upload`
 
 ## Base de donnees (D1)
 
-Migration : `apps/api/migrations/0001_init.sql`.
+Migrations : `apps/api/migrations/` — `0001_init.sql` (schema initial),
+`0002_publish.sql` (publication).
 
 ### `Users`
 
@@ -129,7 +130,10 @@ Migration : `apps/api/migrations/0001_init.sql`.
 | `id` | TEXT PK | `prj_…` |
 | `user_id` | TEXT FK | cascade a la suppression du compte |
 | `title` | TEXT | |
-| `json_tree` | TEXT | **l'AST complet** |
+| `json_tree` | TEXT | **l'AST complet**, arbre de travail |
+| `slug` | TEXT | adresse publique, unique, `NULL` tant que jamais publie |
+| `published_tree` | TEXT | instantane servi par `/p/:slug` |
+| `published_at` | INTEGER | `NULL` = hors ligne |
 | `created_at` / `updated_at` | INTEGER | |
 
 ### `Medias`
@@ -212,7 +216,26 @@ Format d'erreur unique : `{ "error": { "code", "message", "details"? } }`.
 | `GET` | `/api/projects/:id` | Projet + AST. |
 | `PUT` | `/api/projects/:id` | Sauvegarde `title` et/ou `tree`. **Tout arbre entrant est normalise.** |
 | `DELETE` | `/api/projects/:id` | Supprime. |
-| `GET` | `/api/projects/:id/html` | Projection HTML. |
+| `GET` | `/api/projects/:id/html` | Projection HTML du brouillon. |
+| `POST` | `/api/projects/:id/publish` | Met le site en ligne. `slug` optionnel, sinon derive du titre. |
+| `POST` | `/api/projects/:id/unpublish` | Retire le site. L'adresse reste reservee. |
+
+### Publication — la seule route sans authentification
+
+| Methode | Route | Effet |
+| --- | --- | --- |
+| `GET` | `/p/:slug` | Sert le site publie. Aucun compte requis. |
+
+Le site en ligne est un **instantane** (`published_tree`), distinct de l'arbre de
+travail (`json_tree`) : on continue d'editer sans rien changer pour les
+visiteurs, jusqu'a la publication suivante.
+
+- Slug derive du titre, suffixe automatiquement s'il est deja pris ; un slug
+  demande explicitement et deja occupe renvoie `409`.
+- Retirer le site conserve l'adresse, pour pouvoir republier a la meme URL.
+- Reponse mise en cache 60 s avec revalidation en arriere-plan.
+- L'URL publique est derivee de l'origine de la requete : un domaine
+  personnalise route vers le Worker fonctionne sans configuration.
 
 ### Medias
 
@@ -288,6 +311,8 @@ Details :
 - **Autosave** — 2,5 s apres la derniere modification ; `Ctrl+S` pour forcer.
 - **Apercu** — `/preview?id=…` projette le HTML avec la meme fonction que l'API,
   et permet de telecharger le fichier.
+- **Publication** — bouton "Publier" : choix de l'adresse, lien public copiable,
+  pastille doree quand des modifications ne sont pas encore en ligne.
 
 Toute mutation — manuelle ou IA — passe par `runOperations` : un seul point
 d'entree, donc un historique et une validation communs.
@@ -299,13 +324,14 @@ d'entree, donc un historique et une validation communs.
 ```bash
 npm test                          # tous les espaces
 npm test --workspace @crea/schema # AST seul
-npm test --workspace @crea/api    # signature SigV4
+npm test --workspace @crea/api    # SigV4 et slugs
 ```
 
 | Couverture | Verifie |
 | --- | --- |
 | AST (12 tests) | insertion refusee sur une feuille, fusion des styles par famille, refus du deplacement dans un descendant, duplication avec ids frais, ids dupliques reattribues, type inconnu rejete, parsing IA tolerant, echappement HTML, neutralisation des URL `javascript:`, rendu deterministe |
 | SigV4 (3 tests) | **vecteur de test officiel AWS reproduit a l'identique**, encodage des cles, borne des 7 jours |
+| Slug (5 tests) | accents et ponctuation normalises, aucun tiret en bordure, troncature sans tiret final, motif de la route publique toujours respecte |
 
 La CI (`.github/workflows/ci.yml`) rejoue `typecheck`, `test` et `build` sur
 chaque pull request et sur `main`, depuis une installation propre.

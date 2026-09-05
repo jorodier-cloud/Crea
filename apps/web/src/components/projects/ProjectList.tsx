@@ -103,11 +103,20 @@ export function ProjectList(): React.ReactElement {
               className="flex items-center justify-between gap-4 rounded-xl border border-line bg-white px-4 py-3"
             >
               <a href={`/builder?id=${project.id}`} className="min-w-0 flex-1">
-                <span className="block truncate text-[15px] font-semibold text-ink">
-                  {project.title}
+                <span className="flex items-center gap-2">
+                  <span className="truncate text-[15px] font-semibold text-ink">
+                    {project.title}
+                  </span>
+                  {project.publishedAt !== null && (
+                    <span className="flex shrink-0 items-center gap-1 rounded-full bg-linen px-2 py-0.5 text-[10px] font-semibold tracking-wide text-forest uppercase">
+                      <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-sage" />
+                      En ligne
+                    </span>
+                  )}
                 </span>
                 <span className="block text-[12px] text-muted">
                   Modifie le {formatDate(project.updatedAt)}
+                  {project.slug ? ` — /p/${project.slug}` : ''}
                 </span>
               </a>
               <a

@@ -1,6 +1,7 @@
 import { api } from '../../lib/api.js';
 import { clearToken } from '../../lib/session.js';
 import { useBuilderStore } from '../../store/builderStore.js';
+import { PublishButton } from './PublishButton.js';
 
 const VIEWPORTS = [
   { value: 'desktop', label: 'Bureau' },
@@ -104,10 +105,12 @@ export function TopBar(): React.ReactElement {
         type="button"
         onClick={() => void save()}
         disabled={!dirty || saveStatus === 'saving'}
-        className="crea-btn crea-btn-primary"
+        className="crea-btn crea-btn-ghost"
       >
         Enregistrer
       </button>
+
+      <PublishButton />
 
       <button
         type="button"

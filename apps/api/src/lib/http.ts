@@ -35,6 +35,9 @@ export const forbidden = (message = 'Acces refuse.'): ApiError =>
 export const notFound = (message = 'Ressource introuvable.'): ApiError =>
   new ApiError(404, 'not_found', message);
 
+export const conflict = (message: string, details?: unknown): ApiError =>
+  new ApiError(409, 'conflict', message, details);
+
 export const tooManyRequests = (message: string): ApiError =>
   new ApiError(429, 'rate_limited', message);
 

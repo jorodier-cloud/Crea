@@ -61,12 +61,21 @@ export interface PublicUser {
 export interface ProjectSummary {
   id: string;
   title: string;
+  /** Adresse publique du site, `null` tant qu il n a jamais ete publie. */
+  slug: string | null;
+  /** Horodatage de la derniere mise en ligne, `null` si hors ligne. */
+  publishedAt: number | null;
   createdAt: number;
   updatedAt: number;
 }
 
 export interface Project extends ProjectSummary {
   tree: PageTree;
+}
+
+export interface PublishResult {
+  project: Project;
+  publicUrl: string | null;
 }
 
 export interface Media {
@@ -134,7 +143,17 @@ export const api = {
       body: JSON.stringify({ title }),
     }),
 
-  getProject: (id: string) => request<{ project: Project }>(`/api/projects/${id}`),
+  getProject: (id: string) =>
+    request<{ project: Project; publicUrl: string | null }>(`/api/projects/${id}`),
+
+  publishProject: (id: string, slug?: string) =>
+    request<PublishResult>(`/api/projects/${id}/publish`, {
+      method: 'POST',
+      body: JSON.stringify(slug ? { slug } : {}),
+    }),
+
+  unpublishProject: (id: string) =>
+    request<PublishResult>(`/api/projects/${id}/unpublish`, { method: 'POST' }),
 
   saveProject: (id: string, input: { title?: string; tree?: PageTree }) =>
     request<{ project: Project; issues: string[] }>(`/api/projects/${id}`, {

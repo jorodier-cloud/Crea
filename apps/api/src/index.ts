@@ -8,6 +8,7 @@ import { aiRoutes } from './routes/ai.js';
 import { authRoutes } from './routes/auth.js';
 import { mediaRoutes } from './routes/media.js';
 import { projectRoutes } from './routes/projects.js';
+import { publicRoutes } from './routes/public.js';
 
 const app = new Hono<AppBindings>();
 
@@ -49,6 +50,9 @@ app.get('/api/health', async (c) => {
   }
   return c.json({ ok: Object.values(checks).every(Boolean), checks });
 });
+
+// Sites publies : seule surface sans authentification.
+app.route('/p', publicRoutes);
 
 app.route('/api/auth', authRoutes);
 app.route('/api/projects', projectRoutes);

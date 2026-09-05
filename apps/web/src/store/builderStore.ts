@@ -67,6 +67,12 @@ export interface BuilderState {
   saveStatus: SaveStatus;
   lastSavedAt: number | null;
 
+  // Publication
+  slug: string | null;
+  publishedAt: number | null;
+  publicUrl: string | null;
+  publishing: boolean;
+
   // IA
   points: number;
   pointsCeiling: number;
@@ -95,6 +101,8 @@ export interface BuilderState {
   undo: () => void;
   redo: () => void;
   save: () => Promise<void>;
+  publish: (slug?: string) => Promise<void>;
+  unpublish: () => Promise<void>;
   sendPrompt: (prompt: string) => Promise<void>;
   setPoints: (points: number) => void;
   dismissError: () => void;
@@ -151,6 +159,11 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
   saveStatus: 'idle',
   lastSavedAt: null,
 
+  slug: null,
+  publishedAt: null,
+  publicUrl: null,
+  publishing: false,
+
   points: 0,
   pointsCeiling: 1000,
   chat: [],
@@ -159,11 +172,17 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
   async loadProject(id) {
     set({ loading: true, error: null });
     try {
-      const [{ project }, { user }] = await Promise.all([api.getProject(id), api.me()]);
+      const [{ project, publicUrl }, { user }] = await Promise.all([
+        api.getProject(id),
+        api.me(),
+      ]);
       set({
         projectId: project.id,
         title: project.title,
         tree: project.tree,
+        slug: project.slug,
+        publishedAt: project.publishedAt,
+        publicUrl,
         points: user.iaPointsBalance,
         pointsCeiling: Math.max(1000, user.iaPointsBalance),
         past: [],
@@ -360,6 +379,55 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
       set({
         saveStatus: 'error',
         error: error instanceof ApiClientError ? error.message : 'Sauvegarde impossible.',
+      });
+    }
+  },
+
+  /**
+   * Met le site en ligne.
+   *
+   * La publication fige ce qui est EN BASE : on force donc la sauvegarde avant,
+   * sinon les dernieres retouches ne partiraient pas en ligne.
+   */
+  async publish(slug) {
+    const { projectId, publishing, dirty } = get();
+    if (!projectId || publishing) return;
+
+    set({ publishing: true, error: null });
+    try {
+      if (dirty) await get().save();
+      const result = await api.publishProject(projectId, slug);
+      set({
+        publishing: false,
+        slug: result.project.slug,
+        publishedAt: result.project.publishedAt,
+        publicUrl: result.publicUrl,
+      });
+    } catch (error) {
+      set({
+        publishing: false,
+        error: error instanceof ApiClientError ? error.message : 'Publication impossible.',
+      });
+    }
+  },
+
+  async unpublish() {
+    const { projectId, publishing } = get();
+    if (!projectId || publishing) return;
+
+    set({ publishing: true, error: null });
+    try {
+      const result = await api.unpublishProject(projectId);
+      set({
+        publishing: false,
+        slug: result.project.slug,
+        publishedAt: null,
+        publicUrl: null,
+      });
+    } catch (error) {
+      set({
+        publishing: false,
+        error: error instanceof ApiClientError ? error.message : 'Retrait impossible.',
       });
     }
   },
