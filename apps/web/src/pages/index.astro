@@ -1,0 +1,46 @@
+---
+import Base from '../layouts/Base.astro';
+
+const blocks = [
+  ['container', 'Sections, grilles et colonnes'],
+  ['text', 'Titres, paragraphes, citations'],
+  ['media', 'Images et videos servies depuis R2'],
+  ['button', 'Appels a l action et navigation'],
+  ['calendar', 'Disponibilites et reservation'],
+  ['form', 'Contact et demandes de devis'],
+];
+---
+
+<Base title="Crea — constructeur de site hybride">
+  <main class="mx-auto flex min-h-screen max-w-5xl flex-col justify-center px-6 py-20">
+    <p class="mb-3 text-[12px] font-semibold tracking-[0.14em] text-muted uppercase">
+      IA generative + editeur visuel
+    </p>
+
+    <h1 class="font-display text-5xl leading-tight text-forest sm:text-6xl">
+      Un site se decrit,<br />puis se retouche a la main.
+    </h1>
+
+    <p class="mt-6 max-w-2xl text-[17px] leading-relaxed text-muted">
+      Crea ne stocke jamais de HTML. La source de verite est un arbre JSON : le moteur IA et
+      l editeur visuel lisent et modifient ce meme arbre. Le HTML final n est qu une projection,
+      recalculee a la demande.
+    </p>
+
+    <div class="mt-8 flex flex-wrap gap-3">
+      <a href="/login" class="crea-btn crea-btn-primary">Ouvrir le builder</a>
+      <a href="/projects" class="crea-btn crea-btn-ghost">Mes projets</a>
+    </div>
+
+    <ul class="mt-16 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      {
+        blocks.map(([type, description]) => (
+          <li class="rounded-xl border border-line bg-white p-4">
+            <p class="font-mono text-[12px] text-gold">{type}</p>
+            <p class="mt-1 text-[14px] text-ink">{description}</p>
+          </li>
+        ))
+      }
+    </ul>
+  </main>
+</Base>

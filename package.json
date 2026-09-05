@@ -1,0 +1,28 @@
+{
+  "name": "crea",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Hybrid Website Builder — IA generative + editeur visuel, AST JSON comme source de verite.",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "postinstall": "npm run build --workspace @crea/schema",
+    "build:schema": "npm run build --workspace @crea/schema",
+    "dev:api": "npm run dev --workspace @crea/api",
+    "dev:web": "npm run dev --workspace @crea/web",
+    "build": "npm run build --workspace @crea/schema && npm run build --workspace @crea/web",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "db:migrate:local": "npm run db:migrate:local --workspace @crea/api",
+    "db:migrate:remote": "npm run db:migrate:remote --workspace @crea/api"
+  },
+  "engines": {
+    "node": ">=20.11"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
+}

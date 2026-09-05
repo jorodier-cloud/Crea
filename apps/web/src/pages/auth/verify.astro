@@ -1,0 +1,10 @@
+---
+import { VerifyToken } from '../../components/auth/VerifyToken';
+import Base from '../../layouts/Base.astro';
+---
+
+<Base title="Verification — Crea">
+  <main class="flex min-h-screen items-center justify-center px-6">
+    <VerifyToken client:only="react" />
+  </main>
+</Base>

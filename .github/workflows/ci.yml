@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Typecheck, tests et build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      # `npm ci` declenche le postinstall qui construit @crea/schema,
+      # dependance des deux applications.
+      - name: Installer les dependances
+        run: npm ci
+
+      - name: Verifier les types (schema, api, web)
+        run: npm run typecheck
+
+      - name: Executer les tests (AST + SigV4)
+        run: npm test
+
+      - name: Construire le builder
+        run: npm run build
