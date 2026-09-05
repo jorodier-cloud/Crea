@@ -11,11 +11,12 @@
   "scripts": {
     "postinstall": "npm run build --workspace @crea/schema",
     "build:schema": "npm run build --workspace @crea/schema",
+    "setup:cloudflare": "node scripts/setup-cloudflare.mjs",
     "dev:api": "npm run dev --workspace @crea/api",
     "dev:web": "npm run dev --workspace @crea/web",
     "build": "npm run build --workspace @crea/schema && npm run build --workspace @crea/web",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "test": "npm run test --workspaces --if-present",
+    "test": "node --test scripts/lib/*.test.mjs && npm run test --workspaces --if-present",
     "db:migrate:local": "npm run db:migrate:local --workspace @crea/api",
     "db:migrate:remote": "npm run db:migrate:remote --workspace @crea/api"
   },

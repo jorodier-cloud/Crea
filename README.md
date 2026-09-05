@@ -21,7 +21,7 @@ Constructeur de site web hybride : **IA generative + editeur visuel manuel**.
 | [Points IA](#points-ia) | Bareme et debit |
 | [Builder](#builder-astro--react) | Les 3 zones de l'interface |
 | [Tests](#tests) | Ce qui est couvert |
-| [Deploiement](#deploiement) | Mise en production Cloudflare |
+| [Deploiement](#deploiement) | Script d installation et mise en production |
 
 ---
 
@@ -325,12 +325,14 @@ d'entree, donc un historique et une validation communs.
 npm test                          # tous les espaces
 npm test --workspace @crea/schema # AST seul
 npm test --workspace @crea/api    # SigV4 et slugs
+node --test scripts/lib/*.test.mjs # script d installation
 ```
 
 | Couverture | Verifie |
 | --- | --- |
 | AST (12 tests) | insertion refusee sur une feuille, fusion des styles par famille, refus du deplacement dans un descendant, duplication avec ids frais, ids dupliques reattribues, type inconnu rejete, parsing IA tolerant, echappement HTML, neutralisation des URL `javascript:`, rendu deterministe |
 | SigV4 (3 tests) | **vecteur de test officiel AWS reproduit a l'identique**, encodage des cles, borne des 7 jours |
+| Installation (13 tests) | reecriture de `wrangler.toml` : cle absente ou ambigue refusee, commentaire perime supprime, prefixe voisin epargne, echappement ; lecture des sorties wrangler (URL deployee, identifiant de compte, UUID de base, etat de session) |
 | Slug (5 tests) | accents et ponctuation normalises, aucun tiret en bordure, troncature sans tiret final, motif de la route publique toujours respecte |
 
 La CI (`.github/workflows/ci.yml`) rejoue `typecheck`, `test` et `build` sur
@@ -344,26 +346,67 @@ complet, refus d'une cle appartenant a un autre compte, 402 sur solde nul.
 
 ## Deploiement
 
+### Voie automatique
+
 ```bash
-# Ressources Cloudflare
+npx wrangler login          # une fois, dans votre navigateur
+npm run setup:cloudflare
+```
+
+Le script `scripts/setup-cloudflare.mjs` enchaine tout ce qui suit, en
+verifiant a chaque etape si le travail est deja fait — il est donc relancable
+sans risque :
+
+| Etape | Detail |
+| --- | --- |
+| Session | Refuse d aller plus loin sans `wrangler login` |
+| D1 | Cree la base `crea` si absente, ecrit le `database_id` dans `wrangler.toml` |
+| R2 | Cree le bucket `crea-media`, tolere qu il existe deja |
+| Production | Bascule `ENVIRONMENT` et renseigne `R2_ACCOUNT_ID` |
+| Secrets | Genere `SESSION_SECRET` (48 octets), demande la cle Anthropic en saisie masquee |
+| Migrations | `d1 migrations apply --remote` |
+| Deploiement | Deploie, lit l URL du Worker, recale `APP_ORIGINS` et `R2_PUBLIC_BASE_URL`, redeploie |
+| Verification | Interroge `/api/health` et affiche chaque controle |
+
+Rien n est modifie avant une confirmation explicite, qui rappelle les actions
+menees sur le compte. `--yes` la saute, `--site-url=<url>` ouvre le CORS sur le
+domaine du builder une fois celui-ci deploye.
+
+Les fonctions qui reecrivent `wrangler.toml` et decodent les sorties de wrangler
+sont isolees dans `scripts/lib/wrangler-config.mjs` et couvertes par 13 tests :
+c est la partie ou une erreur silencieuse ferait le plus de degats.
+
+### Voie manuelle
+
+```bash
 npx wrangler d1 create crea            # -> reporter database_id dans wrangler.toml
 npx wrangler r2 bucket create crea-media
 
-# Secrets de production
 npx wrangler secret put SESSION_SECRET
 npx wrangler secret put ANTHROPIC_API_KEY
-npx wrangler secret put R2_ACCESS_KEY_ID
-npx wrangler secret put R2_SECRET_ACCESS_KEY
+npx wrangler secret put R2_ACCESS_KEY_ID      # optionnel, voir plus bas
+npx wrangler secret put R2_SECRET_ACCESS_KEY  # optionnel
 
 npm run db:migrate:remote
 npm run deploy --workspace @crea/api
+```
+
+Les cles S3 de R2 restent facultatives : sans elles, l upload passe par le
+Worker (`/api/media/upload`) au lieu d une URL presignee.
+
+### Builder
+
+```bash
 npm run build --workspace @crea/web    # -> apps/web/dist sur Cloudflare Pages
 ```
 
-Avant la mise en ligne :
+Definir `PUBLIC_API_URL` sur l URL du Worker dans les variables de Pages, puis
+relancer `npm run setup:cloudflare --site-url=<url de Pages>` pour autoriser
+cette origine dans le CORS.
 
-1. `ENVIRONMENT = "production"` dans `wrangler.toml` (coupe l'exposition du magic link).
-2. `APP_ORIGINS` sur le domaine reel.
-3. Brancher l'envoi du magic link par email — le `TODO` est dans
-   `apps/api/src/routes/auth.ts`, le lien y est deja construit.
-4. `R2_PUBLIC_BASE_URL` sur un domaine R2 dedie plutot que sur le Worker.
+### Reste a faire a la main
+
+Brancher l envoi du magic link par email : le `TODO` est dans
+`apps/api/src/routes/auth.ts`, le lien y est deja construit. Tant que ce n est
+pas fait, en production le lien n est ni renvoye ni envoye — seul le journal du
+Worker en garde la trace.
