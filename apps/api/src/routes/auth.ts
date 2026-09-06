@@ -4,7 +4,16 @@ import { deleteCookie, setCookie } from 'hono/cookie';
 import { allowedOrigins, isDevelopment, type AppBindings } from '../env.js';
 import { randomToken, sha256Hex } from '../lib/crypto.js';
 import { signSession } from '../lib/crypto.js';
-import { badRequest, notFound, readJson, requireEmail, requireString } from '../lib/http.js';
+import {
+  badGateway,
+  badRequest,
+  notConfigured,
+  notFound,
+  readJson,
+  requireEmail,
+  requireString,
+} from '../lib/http.js';
+import { MailError, buildMagicLinkEmail, isMailerConfigured, sendEmail } from '../lib/mailer.js';
 import { SESSION_COOKIE, SESSION_TTL_SECONDS, requireAuth } from '../middleware/auth.js';
 import {
   consumeMagicLink,
@@ -21,10 +30,13 @@ export const authRoutes = new Hono<AppBindings>();
 /**
  * Demande d un magic link.
  *
- * Reponse volontairement identique que le compte existe ou non : l endpoint ne
- * doit pas permettre d enumerer les adresses inscrites. En developpement, le
- * lien est renvoye dans la reponse pour eviter d avoir a brancher un envoi
- * d email.
+ * Le compte est cree a la volee s il n existe pas : la reponse est donc la meme
+ * dans tous les cas, et l endpoint ne permet pas d enumerer les inscrits.
+ *
+ * En developpement, le lien est renvoye dans la reponse — inutile de brancher
+ * un service d envoi pour travailler en local. En production il part par email,
+ * et un echec d envoi est signale : repondre `ok` a quelqu un qui ne recevra
+ * jamais rien est la pire des reponses.
  */
 authRoutes.post('/magic-link', async (c) => {
   const body = await readJson<{ email?: unknown }>(c.req.raw);
@@ -40,17 +52,37 @@ authRoutes.post('/magic-link', async (c) => {
   const origin = allowedOrigins(c.env)[0] ?? 'http://localhost:4321';
   const link = `${origin}/auth/verify?token=${encodeURIComponent(token)}`;
 
-  // TODO production : router `link` vers un service d envoi (Resend, Postmark,
-  // MailChannels...) au lieu de le retourner.
-  if (!isDevelopment(c.env)) {
-    console.log(JSON.stringify({ event: 'magic_link_issued', userId: user.id, expiresAt }));
+  if (isDevelopment(c.env)) {
+    return c.json({ ok: true, expiresAt, devLink: link, devToken: token });
   }
 
-  return c.json({
-    ok: true,
-    expiresAt,
-    ...(isDevelopment(c.env) ? { devLink: link, devToken: token } : {}),
-  });
+  if (!isMailerConfigured(c.env)) {
+    throw notConfigured(
+      'Envoi d emails non configure : le lien ne peut pas etre transmis. ' +
+        'Poser le secret RESEND_API_KEY sur le Worker.',
+    );
+  }
+
+  const message = buildMagicLinkEmail({ link, expiresAt });
+
+  try {
+    await sendEmail(c.env, { to: user.email, ...message });
+  } catch (error) {
+    // Le lien lui-meme ne doit jamais atterrir dans les journaux : quiconque y
+    // a acces prendrait la main sur le compte.
+    console.error(
+      JSON.stringify({
+        event: 'magic_link_send_failed',
+        userId: user.id,
+        ...(error instanceof MailError ? { upstreamStatus: error.status } : {}),
+        reason: error instanceof Error ? error.message : String(error),
+      }),
+    );
+    throw badGateway("L envoi de l email a echoue. Reessayez dans un instant.");
+  }
+
+  console.log(JSON.stringify({ event: 'magic_link_sent', userId: user.id, expiresAt }));
+  return c.json({ ok: true, expiresAt });
 });
 
 /** Echange le jeton du magic link contre une session. Le jeton est consomme. */

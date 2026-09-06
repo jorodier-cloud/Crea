@@ -20,6 +20,7 @@ import { createInterface } from 'node:readline';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { OPTIONAL_SECRETS, resolveSecret } from './lib/deploy.mjs';
 import {
   buildAppOrigins,
   extractAccountId,
@@ -251,27 +252,31 @@ async function setupSecrets() {
     ok('SESSION_SECRET genere (48 octets aleatoires) et pose');
   }
 
-  if (/ANTHROPIC_API_KEY/.test(existing)) {
-    ok('ANTHROPIC_API_KEY deja posee');
-    return;
+  // Meme table que le deploiement automatise : une cle ajoutee la se retrouve
+  // ici sans rien reecrire.
+  for (const [name, { label, consequence, sources }] of Object.entries(OPTIONAL_SECRETS)) {
+    if (new RegExp(`\\b${name}\\b`).test(existing)) {
+      ok(`${name} deja posee`);
+      continue;
+    }
+
+    let key = resolveSecret(name, process.env);
+
+    if (!key && process.stdin.isTTY) {
+      console.log(`  ${color.dim(`${label}. Saisie masquee.`)}`);
+      key = await askSecret('  Cle (Entree pour passer) : ');
+    }
+
+    if (!key) {
+      warn(`${name} non posee : ${consequence}.`);
+      warn(`A poser plus tard : npx wrangler secret put ${name}`);
+      warn(`Ou definir ${sources[0]} avant de relancer ce script.`);
+      continue;
+    }
+
+    wrangler(['secret', 'put', name], { input: `${key}\n` });
+    ok(`${name} posee`);
   }
-
-  const fromEnv = process.env.ANTHROPIC_API_KEY;
-  let key = fromEnv ?? '';
-
-  if (!key && process.stdin.isTTY) {
-    console.log(`  ${color.dim('Cle API Anthropic — console.anthropic.com. Saisie masquee.')}`);
-    key = await askSecret('  Cle (Entree pour passer) : ');
-  }
-
-  if (!key) {
-    warn('ANTHROPIC_API_KEY non posee : le moteur IA repondra 503.');
-    warn('A poser plus tard : npx wrangler secret put ANTHROPIC_API_KEY');
-    return;
-  }
-
-  wrangler(['secret', 'put', 'ANTHROPIC_API_KEY'], { input: `${key}\n` });
-  ok('ANTHROPIC_API_KEY posee');
 }
 
 function applyMigrations() {
@@ -303,7 +308,7 @@ async function main() {
 
   console.log(`\n${color.bold('Ce script va, sur votre compte Cloudflare :')}`);
   console.log('  - creer la base D1 "crea" et le bucket R2 "crea-media" si absents');
-  console.log('  - poser les secrets SESSION_SECRET et ANTHROPIC_API_KEY');
+  console.log('  - poser les secrets SESSION_SECRET, ANTHROPIC_API_KEY et RESEND_API_KEY');
   console.log('  - appliquer les migrations sur la base distante');
   console.log('  - deployer le Worker (il devient accessible publiquement)');
   console.log('  - modifier apps/api/wrangler.toml (a commiter ensuite)');
@@ -356,6 +361,7 @@ async function main() {
         console.log(`  ${passing ? color.green('OK') : color.amber('--')}  ${name}`);
       }
       if (!checks.anthropic) warn('moteur IA inactif tant que ANTHROPIC_API_KEY n est pas posee.');
+      if (!checks.mail) warn('aucune connexion possible tant que RESEND_API_KEY n est pas posee.');
     } catch (error) {
       warn(`/api/health injoignable : ${error instanceof Error ? error.message : error}`);
     }

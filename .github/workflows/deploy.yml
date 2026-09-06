@@ -41,6 +41,7 @@ jobs:
           # Les deux noms sont acceptes : un secret nomme sans le prefixe reste
           # un secret valide, et le deploiement ne doit pas dependre de ce detail.
           ANTHROPIC: ${{ secrets.CREA_ANTHROPIC_API_KEY }}${{ secrets.ANTHROPIC_API_KEY }}
+          RESEND: ${{ secrets.CREA_RESEND_API_KEY }}${{ secrets.RESEND_API_KEY }}
         run: |
           # `if` explicites plutot que `[ ... ] && ...` : sous `set -e`, une telle
           # ligne placee en fin de bloc ferait echouer l etape quand la condition
@@ -64,7 +65,8 @@ jobs:
               echo "| --- | --- |"
               echo "| \`CLOUDFLARE_API_TOKEN\` | Cloudflare > My Profile > API Tokens — modele **Edit Cloudflare Workers** (il inclut Workers, D1 et R2) |"
               echo "| \`CLOUDFLARE_ACCOUNT_ID\` | Cloudflare > Workers > barre laterale |"
-              echo "| \`CREA_ANTHROPIC_API_KEY\` | console.anthropic.com — optionnel |"
+              echo "| \`CREA_ANTHROPIC_API_KEY\` | console.anthropic.com — sans elle, pas de moteur IA |"
+              echo "| \`CREA_RESEND_API_KEY\` | resend.com > API Keys — sans elle, pas de lien de connexion |"
               echo ""
               echo "La base D1 et le bucket R2 sont crees automatiquement : rien a preparer dans Cloudflare."
             } >> "$GITHUB_STEP_SUMMARY"
@@ -73,6 +75,9 @@ jobs:
             echo "configured=true" >> "$GITHUB_OUTPUT"
             if [ -z "$ANTHROPIC" ]; then
               echo "::warning::Cle Anthropic absente (ni CREA_ANTHROPIC_API_KEY ni ANTHROPIC_API_KEY) — le moteur IA repondra 503. Verifier l onglet *Secrets*, pas *Variables*."
+            fi
+            if [ -z "$RESEND" ]; then
+              echo "::warning::Cle Resend absente (ni CREA_RESEND_API_KEY ni RESEND_API_KEY) — aucun lien de connexion ne partira. Verifier l onglet *Secrets*, pas *Variables*."
             fi
           fi
 
@@ -97,6 +102,9 @@ jobs:
           CREA_D1_DATABASE_ID: ${{ secrets.CREA_D1_DATABASE_ID }}
           CREA_ANTHROPIC_API_KEY: ${{ secrets.CREA_ANTHROPIC_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CREA_RESEND_API_KEY: ${{ secrets.CREA_RESEND_API_KEY }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          CREA_MAIL_FROM: ${{ vars.CREA_MAIL_FROM }}
           CREA_SITE_URL: ${{ vars.CREA_SITE_URL }}
           CREA_WORKERS_SUBDOMAIN: ${{ vars.CREA_WORKERS_SUBDOMAIN }}
         run: node scripts/deploy-ci.mjs

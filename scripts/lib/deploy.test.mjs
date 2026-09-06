@@ -2,14 +2,15 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
-  anthropicKeyMissing,
   describeKeySources,
   missingEnvVars,
+  missingOptionalSecrets,
   planSecrets,
   planUrlUpdates,
   readSubdomainCreation,
   readSubdomainState,
-  resolveAnthropicKey,
+  resolveSecret,
+  resolveSecrets,
   resolveSiteUrl,
   toValidSubdomain,
 } from './deploy.mjs';
@@ -17,6 +18,8 @@ import {
 const EMPTY_SECRETS = '[]';
 const WITH_SESSION = '[{"name":"SESSION_SECRET"}]';
 const WITH_BOTH = '[{"name":"SESSION_SECRET"},{"name":"ANTHROPIC_API_KEY"}]';
+const WITH_ALL =
+  '[{"name":"SESSION_SECRET"},{"name":"ANTHROPIC_API_KEY"},{"name":"RESEND_API_KEY"}]';
 
 test('SESSION_SECRET est genere une seule fois', () => {
   const first = planSecrets(EMPTY_SECRETS);
@@ -26,6 +29,22 @@ test('SESSION_SECRET est genere une seule fois', () => {
 
   // Deja pose : ne pas le regenerer, cela deconnecterait tout le monde.
   assert.equal(planSecrets(WITH_SESSION).length, 0);
+});
+
+test('les deux cles fournies sont posees dans le meme passage', () => {
+  const plan = planSecrets(WITH_SESSION, {
+    ANTHROPIC_API_KEY: 'sk-ant',
+    RESEND_API_KEY: 're_abc',
+  });
+  assert.deepEqual(
+    plan.map((entry) => entry.name),
+    ['ANTHROPIC_API_KEY', 'RESEND_API_KEY'],
+  );
+  assert.ok(plan.every((entry) => entry.reason === 'posee'));
+});
+
+test('une valeur blanche ne declenche pas de pose inutile', () => {
+  assert.equal(planSecrets(WITH_SESSION, { RESEND_API_KEY: '   ' }).length, 0);
 });
 
 test('deux generations de SESSION_SECRET ne donnent pas la meme valeur', () => {
@@ -46,34 +65,64 @@ test('sans valeur fournie, la cle Anthropic deja posee est laissee intacte', () 
   assert.equal(planSecrets(WITH_BOTH).length, 0);
 });
 
-test('anthropicKeyMissing distingue les trois situations', () => {
-  assert.equal(anthropicKeyMissing(EMPTY_SECRETS), true);
-  assert.equal(anthropicKeyMissing(EMPTY_SECRETS, { ANTHROPIC_API_KEY: 'sk' }), false);
-  assert.equal(anthropicKeyMissing(WITH_BOTH), false);
+test('les secrets manquants sont nommes avec ce qu ils empechent', () => {
+  const absents = missingOptionalSecrets(EMPTY_SECRETS);
+  assert.deepEqual(
+    absents.map((entry) => entry.name),
+    ['ANTHROPIC_API_KEY', 'RESEND_API_KEY'],
+  );
+  assert.match(absents[1].consequence, /aucune connexion possible/);
 });
 
-test('la cle Anthropic est acceptee sous ses deux noms', () => {
-  assert.equal(resolveAnthropicKey({ CREA_ANTHROPIC_API_KEY: 'sk-prefixe' }), 'sk-prefixe');
-  assert.equal(resolveAnthropicKey({ ANTHROPIC_API_KEY: 'sk-simple' }), 'sk-simple');
+test('un secret deja pose sur le Worker n a pas besoin d etre refourni', () => {
+  assert.deepEqual(missingOptionalSecrets(WITH_ALL), []);
+  // Deja pose pour l un, fourni maintenant pour l autre : plus rien ne manque.
+  assert.deepEqual(missingOptionalSecrets(WITH_BOTH, { RESEND_API_KEY: 're_abc' }), []);
+  assert.deepEqual(
+    missingOptionalSecrets(WITH_BOTH).map((entry) => entry.name),
+    ['RESEND_API_KEY'],
+  );
+});
+
+test('chaque cle est acceptee sous ses deux noms', () => {
+  assert.equal(
+    resolveSecret('ANTHROPIC_API_KEY', { CREA_ANTHROPIC_API_KEY: 'sk-prefixe' }),
+    'sk-prefixe',
+  );
+  assert.equal(resolveSecret('RESEND_API_KEY', { RESEND_API_KEY: 're_simple' }), 're_simple');
 
   // Le nom prefixe l emporte : c est celui que documente le depot.
   assert.equal(
-    resolveAnthropicKey({ CREA_ANTHROPIC_API_KEY: 'sk-prefixe', ANTHROPIC_API_KEY: 'sk-simple' }),
+    resolveSecret('ANTHROPIC_API_KEY', {
+      CREA_ANTHROPIC_API_KEY: 'sk-prefixe',
+      ANTHROPIC_API_KEY: 'sk-simple',
+    }),
     'sk-prefixe',
   );
 });
 
 test('un secret vide ou blanc compte comme absent', () => {
   // GitHub transmet une chaine vide, pas `undefined`, quand le secret n existe pas.
-  assert.equal(resolveAnthropicKey({ CREA_ANTHROPIC_API_KEY: '', ANTHROPIC_API_KEY: '  ' }), '');
-  assert.equal(resolveAnthropicKey({}), '');
-  assert.equal(resolveAnthropicKey(), '');
+  assert.equal(
+    resolveSecret('ANTHROPIC_API_KEY', { CREA_ANTHROPIC_API_KEY: '', ANTHROPIC_API_KEY: '  ' }),
+    '',
+  );
+  assert.equal(resolveSecret('ANTHROPIC_API_KEY', {}), '');
+  assert.equal(resolveSecret('INCONNU', { INCONNU: 'x' }), '');
 
   // Le nom vide ne masque pas l autre.
   assert.equal(
-    resolveAnthropicKey({ CREA_ANTHROPIC_API_KEY: '   ', ANTHROPIC_API_KEY: 'sk-simple' }),
-    'sk-simple',
+    resolveSecret('RESEND_API_KEY', { CREA_RESEND_API_KEY: '   ', RESEND_API_KEY: 're_simple' }),
+    're_simple',
   );
+});
+
+test('resolveSecrets ne retient que ce qui porte une valeur', () => {
+  assert.deepEqual(
+    resolveSecrets({ ANTHROPIC_API_KEY: 'sk-simple', CREA_RESEND_API_KEY: '  ' }),
+    { ANTHROPIC_API_KEY: 'sk-simple' },
+  );
+  assert.deepEqual(resolveSecrets({}), {});
 });
 
 test('le diagnostic nomme les variables sans reveler les valeurs', () => {
@@ -81,6 +130,8 @@ test('le diagnostic nomme les variables sans reveler les valeurs', () => {
   assert.deepEqual(sources, [
     { name: 'CREA_ANTHROPIC_API_KEY', present: false },
     { name: 'ANTHROPIC_API_KEY', present: true },
+    { name: 'CREA_RESEND_API_KEY', present: false },
+    { name: 'RESEND_API_KEY', present: false },
   ]);
   assert.ok(!JSON.stringify(sources).includes('sk-secrete'));
 });

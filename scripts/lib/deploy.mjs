@@ -10,12 +10,35 @@ import { buildAppOrigins, getTomlValue } from './wrangler-config.mjs';
  */
 
 /**
+ * Secrets fournis par l utilisateur, et les noms d environnement acceptes pour
+ * chacun, par ordre de priorite.
+ *
+ * Le prefixe `CREA_` evite toute collision avec les variables que lisent les
+ * SDK, mais rien n empeche de nommer le secret GitHub sans lui : un
+ * deploiement qui reste muet parce que le secret porte l autre nom coute une
+ * demi-heure de recherche pour rien. Chaque entree dit aussi ce qui cesse de
+ * fonctionner sans elle — c est ce que lira l utilisateur dans le journal.
+ */
+export const OPTIONAL_SECRETS = {
+  ANTHROPIC_API_KEY: {
+    sources: ['CREA_ANTHROPIC_API_KEY', 'ANTHROPIC_API_KEY'],
+    label: 'Cle API Anthropic — console.anthropic.com',
+    consequence: 'le moteur IA repondra 503',
+  },
+  RESEND_API_KEY: {
+    sources: ['CREA_RESEND_API_KEY', 'RESEND_API_KEY'],
+    label: 'Cle API Resend — resend.com > API Keys',
+    consequence: 'aucun lien de connexion ne partira, donc aucune connexion possible',
+  },
+};
+
+/**
  * Determine les secrets a poser.
  *
  * `SESSION_SECRET` n est genere que s il manque : le regenerer a chaque
- * deploiement deconnecterait tout le monde. `ANTHROPIC_API_KEY` est au
- * contraire repose des qu une valeur est fournie, pour qu une rotation de cle
- * prenne effet au deploiement suivant.
+ * deploiement deconnecterait tout le monde. Les cles fournies sont au contraire
+ * reposees des qu une valeur arrive, pour qu une rotation prenne effet au
+ * deploiement suivant.
  */
 export function planSecrets(existingSecretsOutput, available = {}) {
   const listing = String(existingSecretsOutput ?? '');
@@ -30,38 +53,36 @@ export function planSecrets(existingSecretsOutput, available = {}) {
     });
   }
 
-  if (available.ANTHROPIC_API_KEY) {
-    plan.push({
-      name: 'ANTHROPIC_API_KEY',
-      value: available.ANTHROPIC_API_KEY,
-      reason: has('ANTHROPIC_API_KEY') ? 'mise a jour' : 'posee',
-    });
+  for (const name of Object.keys(OPTIONAL_SECRETS)) {
+    const value = String(available[name] ?? '').trim();
+    if (!value) continue;
+    plan.push({ name, value, reason: has(name) ? 'mise a jour' : 'posee' });
   }
 
   return plan;
 }
 
 /**
- * Noms sous lesquels la cle Anthropic peut arriver, par ordre de priorite.
- *
- * Le prefixe `CREA_` evite toute collision avec les variables du SDK, mais rien
- * n empeche de nommer le secret GitHub `ANTHROPIC_API_KEY` tout court : un
- * deploiement qui echoue parce que le secret porte l autre nom coute une
- * demi-heure de recherche pour rien.
+ * Retourne la premiere valeur reellement fournie pour un secret, ou une chaine
+ * vide. Les valeurs blanches comptent comme absentes : un secret GitHub qui n
+ * existe pas arrive comme une chaine vide, pas comme `undefined`.
  */
-export const ANTHROPIC_KEY_NAMES = ['CREA_ANTHROPIC_API_KEY', 'ANTHROPIC_API_KEY'];
-
-/**
- * Retourne la premiere cle Anthropic reellement fournie, ou une chaine vide.
- * Les valeurs vides ou blanches sont traitees comme absentes : un secret
- * GitHub cree sans valeur arrive comme une chaine vide, pas comme `undefined`.
- */
-export function resolveAnthropicKey(env = {}) {
-  for (const name of ANTHROPIC_KEY_NAMES) {
-    const value = String(env[name] ?? '').trim();
+export function resolveSecret(name, env = {}) {
+  for (const source of OPTIONAL_SECRETS[name]?.sources ?? []) {
+    const value = String(env[source] ?? '').trim();
     if (value) return value;
   }
   return '';
+}
+
+/** Toutes les cles fournies, pretes pour `planSecrets`. */
+export function resolveSecrets(env = {}) {
+  const found = {};
+  for (const name of Object.keys(OPTIONAL_SECRETS)) {
+    const value = resolveSecret(name, env);
+    if (value) found[name] = value;
+  }
+  return found;
 }
 
 /**
@@ -69,16 +90,27 @@ export function resolveAnthropicKey(env = {}) {
  * Sert au diagnostic : jamais la valeur, uniquement le nom.
  */
 export function describeKeySources(env = {}) {
-  return ANTHROPIC_KEY_NAMES.map((name) => ({
-    name,
-    present: String(env[name] ?? '').trim().length > 0,
-  }));
+  return Object.values(OPTIONAL_SECRETS)
+    .flatMap((entry) => entry.sources)
+    .map((name) => ({
+      name,
+      present: String(env[name] ?? '').trim().length > 0,
+    }));
 }
 
-/** Vrai si le moteur IA restera inactif faute de cle. */
-export function anthropicKeyMissing(existingSecretsOutput, available = {}) {
-  if (available.ANTHROPIC_API_KEY) return false;
-  return !/\bANTHROPIC_API_KEY\b/.test(String(existingSecretsOutput ?? ''));
+/**
+ * Secrets qui resteront absents apres ce deploiement, avec ce que chacun
+ * empeche de fonctionner. Un secret deja pose sur le Worker n a pas besoin d
+ * etre refourni.
+ */
+export function missingOptionalSecrets(existingSecretsOutput, available = {}) {
+  const listing = String(existingSecretsOutput ?? '');
+  return Object.entries(OPTIONAL_SECRETS)
+    .filter(([name]) => {
+      if (String(available[name] ?? '').trim()) return false;
+      return !new RegExp(`\\b${name}\\b`).test(listing);
+    })
+    .map(([name, entry]) => ({ name, consequence: entry.consequence }));
 }
 
 /**

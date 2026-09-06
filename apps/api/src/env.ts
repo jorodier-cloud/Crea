@@ -12,10 +12,12 @@ export interface Env {
   R2_BUCKET_NAME: string;
   ANTHROPIC_MODEL: string;
   SIGNUP_IA_POINTS: string;
+  MAIL_FROM: string;
 
   // Secrets
   SESSION_SECRET: string;
   ANTHROPIC_API_KEY: string;
+  RESEND_API_KEY: string;
   R2_ACCESS_KEY_ID: string;
   R2_SECRET_ACCESS_KEY: string;
 }

@@ -14,6 +14,9 @@
  *   CREA_D1_DATABASE_ID     optionnel — sinon la base est creee au besoin
  *   CREA_ANTHROPIC_API_KEY  optionnel — sans elle le moteur IA renvoie 503
  *                           (ANTHROPIC_API_KEY est accepte comme repli)
+ *   CREA_RESEND_API_KEY     optionnel — sans elle aucun lien de connexion ne
+ *                           part (RESEND_API_KEY accepte comme repli)
+ *   CREA_MAIL_FROM          optionnel — expediteur des emails
  *   CREA_SITE_URL           optionnel — domaine du builder s il est servi
  *                           ailleurs que sur son URL workers.dev par defaut
  *   CREA_WORKERS_SUBDOMAIN  optionnel — nom workers.dev du compte (defaut : crea)
@@ -25,14 +28,14 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
-  anthropicKeyMissing,
   describeKeySources,
   missingEnvVars,
+  missingOptionalSecrets,
   planSecrets,
   planUrlUpdates,
   readSubdomainCreation,
   readSubdomainState,
-  resolveAnthropicKey,
+  resolveSecrets,
   resolveSiteUrl,
   toValidSubdomain,
 } from './lib/deploy.mjs';
@@ -305,14 +308,19 @@ async function main() {
   patch('database_id', databaseId);
   patch('ENVIRONMENT', 'production');
   patch('R2_ACCOUNT_ID', process.env.CLOUDFLARE_ACCOUNT_ID.trim());
+  const mailFrom = process.env.CREA_MAIL_FROM?.trim();
+  if (mailFrom) {
+    patch('MAIL_FROM', mailFrom);
+    ok(`expediteur des emails : ${mailFrom}`);
+  }
   writeFileSync(CONFIG_PATH, config, 'utf8');
   // Le fichier n est jamais recommite : chaque execution repart du depot.
   ok('wrangler.toml prepare pour la production');
 
   step('Secrets du Worker');
   const listed = wrangler(['secret', 'list'], { allowFailure: true });
-  const anthropicKey = resolveAnthropicKey(process.env);
-  const plan = planSecrets(listed.output, { ANTHROPIC_API_KEY: anthropicKey });
+  const provided = resolveSecrets(process.env);
+  const plan = planSecrets(listed.output, provided);
 
   for (const secret of plan) {
     wrangler(['secret', 'put', secret.name], { input: `${secret.value}\n` });
@@ -320,16 +328,19 @@ async function main() {
   }
   if (plan.length === 0) ok('rien a poser, secrets deja en place');
 
-  if (anthropicKeyMissing(listed.output, { ANTHROPIC_API_KEY: anthropicKey })) {
+  const absents = missingOptionalSecrets(listed.output, provided);
+  if (absents.length > 0) {
     // Nommer les variables consultees evite la chasse au secret mal nomme :
-    // le log dit exactement ce que le runner a recu, sans reveler de valeur.
+    // le journal dit exactement ce que le runner a recu, sans reveler de valeur.
     const seen = describeKeySources(process.env)
       .map(({ name, present }) => `${name}=${present ? 'fournie' : 'vide'}`)
       .join(', ');
+    for (const { name, consequence } of absents) {
+      warn(`${name} absente : ${consequence}.`);
+    }
     warn(
-      `ANTHROPIC_API_KEY absente : le moteur IA repondra 503. Variables lues : ${seen}. ` +
-        'Le secret GitHub doit se trouver dans Settings > Secrets and variables > Actions, ' +
-        'onglet Secrets, sous l un de ces deux noms.',
+      `Variables lues : ${seen}. Le secret GitHub doit se trouver dans ` +
+        'Settings > Secrets and variables > Actions, onglet Secrets.',
     );
   }
 
