@@ -332,6 +332,7 @@ node --test scripts/lib/*.test.mjs # script d installation
 | --- | --- |
 | AST (12 tests) | insertion refusee sur une feuille, fusion des styles par famille, refus du deplacement dans un descendant, duplication avec ids frais, ids dupliques reattribues, type inconnu rejete, parsing IA tolerant, echappement HTML, neutralisation des URL `javascript:`, rendu deterministe |
 | SigV4 (3 tests) | **vecteur de test officiel AWS reproduit a l'identique**, encodage des cles, borne des 7 jours |
+| Deploiement (10 tests) | `SESSION_SECRET` genere une seule fois et jamais deux fois identique, cle Anthropic reposee a chaque fourniture, recalage des URL calcule au plus juste, variables manquantes toutes signalees d un coup |
 | Installation (13 tests) | reecriture de `wrangler.toml` : cle absente ou ambigue refusee, commentaire perime supprime, prefixe voisin epargne, echappement ; lecture des sorties wrangler (URL deployee, identifiant de compte, UUID de base, etat de session) |
 | Slug (5 tests) | accents et ponctuation normalises, aucun tiret en bordure, troncature sans tiret final, motif de la route publique toujours respecte |
 
@@ -375,6 +376,43 @@ domaine du builder une fois celui-ci deploye.
 Les fonctions qui reecrivent `wrangler.toml` et decodent les sorties de wrangler
 sont isolees dans `scripts/lib/wrangler-config.mjs` et couvertes par 13 tests :
 c est la partie ou une erreur silencieuse ferait le plus de degats.
+
+### Voie GitHub — sans terminal, depuis un telephone
+
+Le workflow `.github/workflows/deploy.yml` deploie l API a chaque push sur
+`main`, et se declenche aussi a la main depuis l onglet **Actions**. Aucune
+machine de developpement n est necessaire : tout se pilote depuis des pages web.
+
+**A faire une fois, au doigt :**
+
+1. **Cloudflare** — creer la base D1 `crea` et le bucket R2 `crea-media`,
+   puis relever l identifiant de la base.
+2. **Cloudflare > My Profile > API Tokens** — creer un jeton avec les droits
+   d edition sur Workers, D1 et R2.
+3. **GitHub > Settings > Secrets and variables > Actions** — ajouter :
+
+| Secret | Contenu |
+| --- | --- |
+| `CLOUDFLARE_API_TOKEN` | le jeton cree a l etape 2 |
+| `CLOUDFLARE_ACCOUNT_ID` | identifiant de compte Cloudflare |
+| `CREA_D1_DATABASE_ID` | identifiant de la base `crea` |
+| `CREA_ANTHROPIC_API_KEY` | cle du moteur IA — optionnelle |
+
+Une **variable** (et non un secret) `CREA_SITE_URL` peut porter le domaine du
+builder, pour l autoriser dans le CORS.
+
+Tant que les trois premiers secrets manquent, le workflow s arrete proprement et
+affiche ce tableau dans son resume : un depot neuf n affiche pas une croix rouge
+a chaque push.
+
+**A chaque deploiement, le workflow :** verifie les types, execute les tests,
+prepare `wrangler.toml` (identifiant de base, production, compte R2), pose les
+secrets du Worker, applique les migrations distantes, deploie, recale les URL et
+redeploie si besoin. `SESSION_SECRET` n est genere que s il manque — le
+regenerer deconnecterait tous les comptes.
+
+`wrangler.toml` est modifie dans le poste de travail du workflow uniquement,
+jamais recommite : chaque execution repart du depot.
 
 ### Voie manuelle
 

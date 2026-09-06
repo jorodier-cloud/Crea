@@ -1,0 +1,80 @@
+name: Deploiement
+
+# Deploie l API sur Cloudflare Workers sans terminal : tout se pilote depuis
+# GitHub. Declenchable a la main depuis l onglet Actions, y compris sur mobile.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Deux deploiements simultanes se marcheraient dessus.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deployer l API
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      # Tant que les secrets Cloudflare ne sont pas renseignes, le workflow
+      # s arrete proprement : un depot neuf ne doit pas afficher une croix rouge
+      # a chaque push.
+      - name: Verifier que Cloudflare est configure
+        id: gate
+        env:
+          TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          DATABASE: ${{ secrets.CREA_D1_DATABASE_ID }}
+        run: |
+          if [ -z "$TOKEN" ] || [ -z "$ACCOUNT" ] || [ -z "$DATABASE" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "## Deploiement ignore"
+              echo ""
+              echo "Secrets manquants. A ajouter dans **Settings > Secrets and variables > Actions** :"
+              echo ""
+              echo "| Secret | Ou le trouver |"
+              echo "| --- | --- |"
+              echo "| \`CLOUDFLARE_API_TOKEN\` | Cloudflare > My Profile > API Tokens |"
+              echo "| \`CLOUDFLARE_ACCOUNT_ID\` | Cloudflare > Workers > barre laterale |"
+              echo "| \`CREA_D1_DATABASE_ID\` | Cloudflare > Storage & Databases > D1 > crea |"
+              echo "| \`CREA_ANTHROPIC_API_KEY\` | console.anthropic.com — optionnel |"
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::notice::Secrets Cloudflare absents — deploiement ignore, voir le resume."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Installer les dependances
+        if: steps.gate.outputs.configured == 'true'
+        run: npm ci
+
+      # Un deploiement ne part jamais sur du code qui ne passe pas les controles.
+      - name: Verifier les types
+        if: steps.gate.outputs.configured == 'true'
+        run: npm run typecheck
+
+      - name: Executer les tests
+        if: steps.gate.outputs.configured == 'true'
+        run: npm test
+
+      - name: Deployer
+        if: steps.gate.outputs.configured == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CREA_D1_DATABASE_ID: ${{ secrets.CREA_D1_DATABASE_ID }}
+          CREA_ANTHROPIC_API_KEY: ${{ secrets.CREA_ANTHROPIC_API_KEY }}
+          CREA_SITE_URL: ${{ vars.CREA_SITE_URL }}
+        run: node scripts/deploy-ci.mjs
