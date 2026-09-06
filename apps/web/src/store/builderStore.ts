@@ -3,6 +3,7 @@ import {
   canHaveChildren,
   createNode,
   createStarterTree,
+  diffChangedNodeIds,
   findLocation,
   findNode,
   nearestContainerId,
@@ -39,6 +40,10 @@ export interface ChatMessage {
   at: number;
   cost?: number;
   applied?: number;
+  /** Etat de l arbre juste avant cette reponse — permet d y revenir d un geste. */
+  beforeTree?: PageTree;
+  /** Blocs touches par cette reponse, pour les faire clignoter dans le canvas. */
+  changedIds?: string[];
 }
 
 export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
@@ -78,6 +83,8 @@ export interface BuilderState {
   pointsCeiling: number;
   chat: ChatMessage[];
   aiPending: boolean;
+  /** Blocs a mettre en evidence dans le canvas — la derniere reponse de l IA. */
+  highlightedIds: string[];
 
   // Actions
   loadProject: (id: string) => Promise<void>;
@@ -106,6 +113,8 @@ export interface BuilderState {
   publish: (slug?: string) => Promise<void>;
   unpublish: () => Promise<void>;
   sendPrompt: (prompt: string) => Promise<void>;
+  /** Restaure l arbre tel qu il etait juste avant la reponse donnee. */
+  revertMessage: (id: string) => void;
   setPoints: (points: number) => void;
   dismissError: () => void;
 }
@@ -170,6 +179,7 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
   pointsCeiling: 1000,
   chat: [],
   aiPending: false,
+  highlightedIds: [],
 
   async loadProject(id) {
     set({ loading: true, error: null });
@@ -193,6 +203,7 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
         loading: false,
         lastSavedAt: project.updatedAt * 1000,
         selectedId: null,
+        highlightedIds: [],
         chat: [
           {
             id: messageId(),
@@ -478,6 +489,10 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
         selectedNodeId: selectedId,
       });
 
+      // Blocs touches par cette reponse : sert au clignotement dans le canvas
+      // et n a de sens qu en comparaison de l arbre d avant, capture ci-dessus.
+      const changedIds = diffChangedNodeIds(tree.root, result.tree.root);
+
       set((state) => ({
         tree: result.tree,
         past: [...state.past, tree].slice(-HISTORY_LIMIT),
@@ -486,6 +501,7 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
         lastSavedAt: result.saved ? Date.now() : state.lastSavedAt,
         points: result.points.balance,
         aiPending: false,
+        highlightedIds: changedIds,
         chat: [
           ...state.chat,
           {
@@ -497,6 +513,8 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
             at: Date.now(),
             cost: result.points.spent,
             applied: result.applied,
+            beforeTree: tree,
+            changedIds,
           },
           ...(result.errors.length > 0
             ? [
@@ -510,6 +528,15 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
             : []),
         ],
       }));
+
+      // Le clignotement s eteint de lui-meme ; une reponse plus recente qui en
+      // aurait deja pose un autre n est jamais effacee par erreur (comparaison
+      // par reference du tableau).
+      if (changedIds.length > 0) {
+        setTimeout(() => {
+          set((state) => (state.highlightedIds === changedIds ? { highlightedIds: [] } : {}));
+        }, 1600);
+      }
     } catch (error) {
       const message =
         error instanceof ApiClientError ? error.message : 'Le moteur IA n a pas repondu.';
@@ -521,6 +548,28 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
         ],
       }));
     }
+  },
+
+  /**
+   * Restaure l arbre tel qu il etait juste avant une reponse donnee de l IA.
+   *
+   * Un geste visible dans la conversation, plutot que le seul Ctrl+Z : quand
+   * on ne pense pas en raccourcis clavier, un bouton sous le message est ce
+   * qu on cherche d instinct pour revenir en arriere.
+   */
+  revertMessage(id) {
+    const message = get().chat.find((entry) => entry.id === id);
+    if (!message?.beforeTree) return;
+    const beforeTree = message.beforeTree;
+
+    set((state) => ({
+      tree: beforeTree,
+      past: [...state.past, state.tree].slice(-HISTORY_LIMIT),
+      future: [],
+      dirty: true,
+      selectedId: null,
+      highlightedIds: [],
+    }));
   },
 
   setPoints(points) {

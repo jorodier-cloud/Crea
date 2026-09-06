@@ -145,6 +145,42 @@ export function nearestContainerId(root: AnyBlockNode, id: string): string {
   return root.id;
 }
 
+/**
+ * Identifiants des blocs qui different entre deux arbres — nouveaux ou
+ * modifies. Sert a mettre en evidence dans le canvas ce que l IA vient de
+ * changer : sans repere visuel, une reponse qui deplace trois blocs dans un
+ * arbre de cinquante noeuds est illisible.
+ *
+ * Un bloc supprime n a pas d id a signaler : il n existe plus a montrer.
+ * `children` est exclu de la comparaison de contenu — un conteneur ne doit pas
+ * paraitre modifie seulement parce qu un descendant l est.
+ */
+export function diffChangedNodeIds(before: AnyBlockNode, after: AnyBlockNode): string[] {
+  const beforeById = new Map<string, AnyBlockNode>();
+  walk(before, ({ node }) => {
+    beforeById.set(node.id, node);
+  });
+
+  const changed: string[] = [];
+  walk(after, ({ node }) => {
+    const previous = beforeById.get(node.id);
+    if (!previous) {
+      changed.push(node.id);
+      return;
+    }
+    const ownFields = (n: AnyBlockNode) => ({
+      name: n.name,
+      content: n.content,
+      styles: n.styles,
+      actions: n.actions,
+    });
+    if (JSON.stringify(ownFields(previous)) !== JSON.stringify(ownFields(node))) {
+      changed.push(node.id);
+    }
+  });
+  return changed;
+}
+
 /** Resume compact de l'arbre, injecte dans le prompt systeme de l'IA. */
 export function outlineTree(root: AnyBlockNode, maxDepth = 6): string {
   const lines: string[] = [];

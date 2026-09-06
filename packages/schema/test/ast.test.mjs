@@ -5,6 +5,7 @@ import {
   applyOperations,
   createNode,
   createStarterTree,
+  diffChangedNodeIds,
   findNode,
   normalizeTree,
   parseAiResponse,
@@ -183,4 +184,46 @@ test('un formulaire imbrique recoit la meme reception que la racine', () => {
   ]);
   const html = renderTreeToHtml(result.tree, { formEndpoint: '/p/rives-ormoy/contact' });
   assert.ok(html.includes('action="/p/rives-ormoy/contact"'));
+});
+
+test('le diff signale un bloc insere', () => {
+  const tree = createStarterTree();
+  const result = applyOperations(tree, [
+    { op: 'insert', parentId: tree.root.id, node: createNode('text') },
+  ]);
+  const inserted = result.tree.root.children.at(-1);
+  assert.deepEqual(diffChangedNodeIds(tree.root, result.tree.root), [inserted.id]);
+});
+
+test('le diff signale un bloc modifie, pas ses freres inchanges', () => {
+  const tree = createStarterTree();
+  const target = tree.root.children[0].children[0];
+  const result = applyOperations(tree, [
+    { op: 'update', id: target.id, content: { text: 'Nouveau titre' } },
+  ]);
+  assert.deepEqual(diffChangedNodeIds(tree.root, result.tree.root), [target.id]);
+});
+
+test('un conteneur n est pas signale seul parce qu un descendant change', () => {
+  const tree = createStarterTree();
+  const section = tree.root.children[0];
+  const target = section.children[0];
+  const result = applyOperations(tree, [
+    { op: 'update', id: target.id, content: { text: 'Autre texte' } },
+  ]);
+  const changed = diffChangedNodeIds(tree.root, result.tree.root);
+  assert.deepEqual(changed, [target.id]);
+  assert.ok(!changed.includes(section.id));
+});
+
+test('sans changement, le diff est vide', () => {
+  const tree = createStarterTree();
+  assert.deepEqual(diffChangedNodeIds(tree.root, tree.root), []);
+});
+
+test('un bloc supprime ne laisse aucun id fantome dans le diff', () => {
+  const tree = createStarterTree();
+  const target = tree.root.children[0].children[0];
+  const result = applyOperations(tree, [{ op: 'remove', id: target.id }]);
+  assert.ok(!diffChangedNodeIds(tree.root, result.tree.root).includes(target.id));
 });
