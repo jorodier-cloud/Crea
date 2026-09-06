@@ -5,11 +5,12 @@ import {
   anthropicKeyMissing,
   describeKeySources,
   missingEnvVars,
-  resolveAnthropicKey,
   planSecrets,
   planUrlUpdates,
   readSubdomainCreation,
   readSubdomainState,
+  resolveAnthropicKey,
+  resolveSiteUrl,
   toValidSubdomain,
 } from './deploy.mjs';
 
@@ -129,6 +130,30 @@ R2_PUBLIC_BASE_URL = "https://crea-api.jino.workers.dev/api/media/file"
 
 test('sans URL de Worker, aucun recalage n est tente', () => {
   assert.deepEqual(planUrlUpdates({ workerUrl: null, siteUrl: '', config: CONFIG }), {});
+});
+
+test('un domaine configure a la main prime sur le site deploye', () => {
+  assert.equal(
+    resolveSiteUrl({
+      configured: 'https://crea.mondomaine.fr/',
+      deployed: 'https://crea-web.jino.workers.dev',
+    }),
+    'https://crea.mondomaine.fr',
+  );
+});
+
+test('a defaut, l origine du CORS est celle du builder qu on vient de deployer', () => {
+  assert.equal(
+    resolveSiteUrl({ configured: '  ', deployed: 'https://crea-web.jino.workers.dev' }),
+    'https://crea-web.jino.workers.dev',
+  );
+});
+
+test('sans builder deploye, aucune origine n est imposee', () => {
+  // `planUrlUpdates` retombera alors sur l URL du Worker : mieux vaut une
+  // origine inutile qu une chaine vide qui fermerait le CORS.
+  assert.equal(resolveSiteUrl({ configured: '', deployed: null }), '');
+  assert.equal(resolveSiteUrl(), '');
 });
 
 test('missingEnvVars signale toutes les variables absentes d un coup', () => {
