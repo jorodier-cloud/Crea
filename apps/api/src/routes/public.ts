@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { escapeHtml, renderTreeToHtml } from '@crea/schema';
+import { applyCalendarSync, escapeHtml, renderTreeToHtml } from '@crea/schema';
 
 import type { AppBindings } from '../env.js';
 import {
@@ -12,6 +12,7 @@ import {
 } from '../lib/contact.js';
 import { badRequest, notFound } from '../lib/http.js';
 import { buildContactEmail, isMailerConfigured, sendEmail } from '../lib/mailer.js';
+import { fetchCalendarBlockedDates } from '../services/ical.js';
 import {
   assertUnderRateLimit,
   findContactTarget,
@@ -110,9 +111,14 @@ publicRoutes.get('/:slug', async (c) => {
   if (!SLUG_PATTERN.test(slug)) throw badRequest('Adresse invalide.');
 
   const site = await getPublishedBySlug(c.env, slug);
+  // Les reservations Airbnb/Booking bloquent des nuits sans passer par l
+  // editeur : sans cette synchronisation, le calendrier publie resterait
+  // celui du dernier "Publier", potentiellement perime de plusieurs jours.
+  const syncedBlockedDates = await fetchCalendarBlockedDates(site.tree);
+  const tree = applyCalendarSync(site.tree, syncedBlockedDates);
   // Les formulaires qui ne declarent pas d adresse visent la reception
   // integree, servie juste en dessous.
-  const html = renderTreeToHtml(site.tree, { formEndpoint: `/p/${slug}/contact` });
+  const html = renderTreeToHtml(tree, { formEndpoint: `/p/${slug}/contact` });
 
   return c.html(html, 200, {
     // Court, pour qu une republication soit visible rapidement, avec
