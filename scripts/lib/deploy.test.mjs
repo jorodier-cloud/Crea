@@ -6,6 +6,9 @@ import {
   missingEnvVars,
   planSecrets,
   planUrlUpdates,
+  readSubdomainCreation,
+  readSubdomainState,
+  toValidSubdomain,
 } from './deploy.mjs';
 
 const EMPTY_SECRETS = '[]';
@@ -97,4 +100,71 @@ test('missingEnvVars signale toutes les variables absentes d un coup', () => {
   const env = { A: 'valeur', B: '', C: '   ' };
   assert.deepEqual(missingEnvVars(env, ['A', 'B', 'C', 'D']), ['B', 'C', 'D']);
   assert.deepEqual(missingEnvVars(env, ['A']), []);
+});
+
+/* Sous-domaine workers.dev — meme regle que `toValidSubdomain` de wrangler. */
+
+test('un nom simple traverse sans modification', () => {
+  assert.equal(toValidSubdomain('crea'), 'crea');
+  assert.equal(toValidSubdomain('rives-ormoy-2026'), 'rives-ormoy-2026');
+});
+
+test('majuscules, accents et espaces sont normalises', () => {
+  assert.equal(toValidSubdomain('Domaine des Rives'), 'domaine-des-rives');
+  assert.equal(toValidSubdomain('Créa'), 'cr-a');
+  assert.equal(toValidSubdomain('a.b_c'), 'a-b-c');
+});
+
+test('aucun tiret ne subsiste en bordure', () => {
+  assert.equal(toValidSubdomain('  --crea--  '), 'crea');
+  assert.equal(toValidSubdomain('---'), '');
+  assert.equal(toValidSubdomain(''), '');
+  assert.equal(toValidSubdomain(undefined), '');
+});
+
+test('la troncature a 63 caracteres ne laisse pas de tiret final', () => {
+  // 62 caracteres puis un separateur : couper a 63 tomberait sur le tiret.
+  const long = `${'a'.repeat(62)} suite`;
+  const slug = toValidSubdomain(long);
+  assert.ok(slug.length <= 63);
+  assert.ok(!slug.endsWith('-'), `termine par un tiret : "${slug}"`);
+});
+
+/* Lecture des reponses de l API sous-domaine (formes reelles de Cloudflare). */
+
+test('un sous-domaine deja enregistre est reconnu', () => {
+  assert.deepEqual(
+    readSubdomainState({ success: true, errors: [], result: { subdomain: 'jino' } }),
+    { state: 'registered', subdomain: 'jino' },
+  );
+});
+
+test('le code 10007 signifie absent, pas en panne', () => {
+  const response = {
+    success: false,
+    errors: [{ code: 10007, message: 'workers.dev subdomain not found' }],
+    result: null,
+  };
+  assert.deepEqual(readSubdomainState(response), { state: 'absent' });
+});
+
+test('toute autre erreur laisse l etat indetermine plutot que de bloquer', () => {
+  const refus = { success: false, errors: [{ code: 10000, message: 'Authentication error' }] };
+  assert.equal(readSubdomainState(refus).state, 'unreadable');
+  assert.equal(readSubdomainState(null).state, 'unreadable');
+  assert.equal(readSubdomainState({ success: true, result: {} }).state, 'unreadable');
+});
+
+test('la creation reussie est distinguee du nom deja pris', () => {
+  assert.deepEqual(readSubdomainCreation({ success: true, result: { subdomain: 'crea' } }), {
+    state: 'created',
+  });
+  assert.deepEqual(
+    readSubdomainCreation({ success: false, errors: [{ code: 10031, message: 'unavailable' }] }),
+    { state: 'taken' },
+  );
+  assert.equal(
+    readSubdomainCreation({ success: false, errors: [{ code: 10000 }] }).state,
+    'failed',
+  );
 });

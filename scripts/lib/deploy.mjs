@@ -76,3 +76,53 @@ export function planUrlUpdates({ workerUrl, siteUrl, config }) {
 export function missingEnvVars(env, required) {
   return required.filter((name) => !String(env[name] ?? '').trim());
 }
+
+/**
+ * Normalise un nom de sous-domaine workers.dev.
+ *
+ * Reprend la regle de wrangler (`toValidSubdomain`) : minuscules, tout
+ * caractere hors [a-z0-9-] devient un tiret, pas de tiret en bordure, 63
+ * caracteres au maximum. Un nom refuse par Cloudflare ferait echouer le
+ * deploiement au pire moment, apres l upload.
+ */
+/**
+ * Interprete la reponse de `GET /accounts/{id}/workers/subdomain`.
+ *
+ * Le code 10007 signifie « aucun sous-domaine enregistre » — c est un etat
+ * normal, pas une panne. Toute autre erreur veut dire qu on ne sait pas, et
+ * mieux vaut alors laisser `wrangler deploy` trancher que bloquer a tort.
+ */
+export function readSubdomainState(response) {
+  if (response?.success && response.result?.subdomain) {
+    return { state: 'registered', subdomain: response.result.subdomain };
+  }
+
+  const codes = (response?.errors ?? []).map((error) => error?.code);
+  if (codes.includes(10007)) return { state: 'absent' };
+
+  return { state: 'unreadable', errors: response?.errors ?? null };
+}
+
+/**
+ * Interprete la reponse de `PUT /accounts/{id}/workers/subdomain`.
+ * Le code 10031 signale un nom deja pris par un autre compte Cloudflare.
+ */
+export function readSubdomainCreation(response) {
+  if (response?.success) return { state: 'created' };
+
+  const codes = (response?.errors ?? []).map((error) => error?.code);
+  if (codes.includes(10031)) return { state: 'taken' };
+
+  return { state: 'failed', errors: response?.errors ?? null };
+}
+
+export function toValidSubdomain(input) {
+  return (
+    String(input ?? '')
+      .toLowerCase()
+      .replace(/[^a-z0-9-]+/g, '-')
+      .replace(/^-+/, '')
+      .slice(0, 63)
+      .replace(/-+$/, '') || ''
+  );
+}

@@ -332,7 +332,7 @@ node --test scripts/lib/*.test.mjs # script d installation
 | --- | --- |
 | AST (12 tests) | insertion refusee sur une feuille, fusion des styles par famille, refus du deplacement dans un descendant, duplication avec ids frais, ids dupliques reattribues, type inconnu rejete, parsing IA tolerant, echappement HTML, neutralisation des URL `javascript:`, rendu deterministe |
 | SigV4 (3 tests) | **vecteur de test officiel AWS reproduit a l'identique**, encodage des cles, borne des 7 jours |
-| Deploiement (10 tests) | `SESSION_SECRET` genere une seule fois et jamais deux fois identique, cle Anthropic reposee a chaque fourniture, recalage des URL calcule au plus juste, variables manquantes toutes signalees d un coup |
+| Deploiement (18 tests) | `SESSION_SECRET` genere une seule fois et jamais deux fois identique, cle Anthropic reposee a chaque fourniture, recalage des URL calcule au plus juste, variables manquantes toutes signalees d un coup, normalisation du sous-domaine, lecture des reponses de l API Cloudflare (absent / deja pris / illisible) |
 | Installation (13 tests) | reecriture de `wrangler.toml` : cle absente ou ambigue refusee, commentaire perime supprime, prefixe voisin epargne, echappement ; lecture des sorties wrangler (URL deployee, identifiant de compte, UUID de base, etat de session) |
 | Slug (5 tests) | accents et ponctuation normalises, aucun tiret en bordure, troncature sans tiret final, motif de la route publique toujours respecte |
 
@@ -401,8 +401,15 @@ machine de developpement n est necessaire : tout se pilote depuis des pages web.
 a preparer dans le tableau de bord Cloudflare. `CREA_D1_DATABASE_ID` reste
 accepte comme raccourci si la base existe deja ailleurs.
 
-Une **variable** (et non un secret) `CREA_SITE_URL` peut porter le domaine du
-builder, pour l autoriser dans le CORS.
+Deux **variables** facultatives (onglet *Variables*, pas *Secrets*) :
+`CREA_SITE_URL` porte le domaine du builder, pour l autoriser dans le CORS ;
+`CREA_WORKERS_SUBDOMAIN` choisit le nom `workers.dev` du compte (defaut `crea`).
+
+Un compte Cloudflare neuf n a pas de sous-domaine `workers.dev` : Cloudflare
+accepte alors l upload du Worker mais refuse de le publier. Le workflow
+l enregistre au premier deploiement. Ce nom est global au compte et durable —
+si celui demande est deja pris par quelqu un d autre, le run le dit et invite a
+en choisir un autre.
 
 Tant que les deux premiers secrets manquent, le workflow s arrete proprement et
 affiche dans son resume **le nom de ceux qui manquent** : un depot neuf n affiche
@@ -410,7 +417,8 @@ pas une croix rouge a chaque push, et le diagnostic ne demande pas de lire les
 journaux.
 
 **A chaque deploiement, le workflow :** verifie les types, execute les tests,
-cree les ressources Cloudflare manquantes, prepare `wrangler.toml` (identifiant de base, production, compte R2), pose les
+cree les ressources Cloudflare manquantes (base D1, bucket R2, sous-domaine
+`workers.dev`), prepare `wrangler.toml` (identifiant de base, production, compte R2), pose les
 secrets du Worker, applique les migrations distantes, deploie, recale les URL et
 redeploie si besoin. `SESSION_SECRET` n est genere que s il manque — le
 regenerer deconnecterait tous les comptes.

@@ -14,6 +14,7 @@
  *   CREA_D1_DATABASE_ID     optionnel — sinon la base est creee au besoin
  *   CREA_ANTHROPIC_API_KEY  optionnel — sans elle le moteur IA renvoie 503
  *   CREA_SITE_URL           optionnel — domaine du builder, pour le CORS
+ *   CREA_WORKERS_SUBDOMAIN  optionnel — nom workers.dev du compte (defaut : crea)
  */
 
 import { spawnSync } from 'node:child_process';
@@ -26,6 +27,9 @@ import {
   missingEnvVars,
   planSecrets,
   planUrlUpdates,
+  readSubdomainCreation,
+  readSubdomainState,
+  toValidSubdomain,
 } from './lib/deploy.mjs';
 import {
   extractWorkerUrl,
@@ -42,6 +46,7 @@ const WRANGLER = join(ROOT, 'node_modules', '.bin', 'wrangler');
 const REQUIRED = ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID'];
 const DATABASE_NAME = 'crea';
 const BUCKET_NAME = 'crea-media';
+const DEFAULT_SUBDOMAIN = 'crea';
 
 let stepNumber = 0;
 const step = (label) => {
@@ -158,7 +163,80 @@ function ensureBucket() {
   console.log(created.output.trimEnd());
 }
 
-function main() {
+/**
+ * Enregistre le sous-domaine workers.dev du compte s il n en a pas.
+ *
+ * Sans lui, Cloudflare accepte l upload du Worker mais refuse de le publier :
+ * le code part, rien n est joignable. Le nom est global au compte et durable,
+ * d ou la variable `CREA_WORKERS_SUBDOMAIN` pour le choisir explicitement.
+ *
+ * Endpoints et codes d erreur repris de l implementation de wrangler
+ * (`deploy-helpers/src/triggers/subdomain.ts`) : 10007 = aucun sous-domaine,
+ * 10031 = nom deja pris par un autre compte.
+ */
+async function ensureWorkersSubdomain() {
+  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID.trim();
+  const base = `https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/subdomain`;
+  const headers = {
+    Authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN.trim()}`,
+    'Content-Type': 'application/json',
+  };
+
+  const current = readSubdomainState(
+    await fetch(base, { headers }).then((response) => response.json()),
+  );
+
+  if (current.state === 'registered') {
+    ok(`sous-domaine deja enregistre : ${current.subdomain}.workers.dev`);
+    return;
+  }
+
+  if (current.state === 'unreadable') {
+    // Droit insuffisant pour lire, ou API indisponible : ne pas bloquer,
+    // `wrangler deploy` donnera le verdict.
+    warn(
+      `etat du sous-domaine workers.dev illisible (${JSON.stringify(current.errors)}). ` +
+        'Le deploiement continue.',
+    );
+    return;
+  }
+
+  const wanted = toValidSubdomain(process.env.CREA_WORKERS_SUBDOMAIN || DEFAULT_SUBDOMAIN);
+  if (!wanted) {
+    fail(
+      'CREA_WORKERS_SUBDOMAIN ne contient aucun caractere utilisable.',
+      'Utilisez des lettres, chiffres et tirets.',
+    );
+  }
+
+  const created = readSubdomainCreation(
+    await fetch(base, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({ subdomain: wanted }),
+    }).then((response) => response.json()),
+  );
+
+  if (created.state === 'created') {
+    ok(`sous-domaine "${wanted}.workers.dev" enregistre pour le compte`);
+    return;
+  }
+
+  if (created.state === 'taken') {
+    fail(
+      `le sous-domaine "${wanted}" est deja pris par un autre compte Cloudflare.`,
+      'Choisissez-en un autre via la variable CREA_WORKERS_SUBDOMAIN ' +
+        '(GitHub > Settings > Secrets and variables > Actions > onglet Variables).',
+    );
+  }
+
+  fail(
+    `enregistrement du sous-domaine "${wanted}" impossible : ${JSON.stringify(created.errors)}.`,
+    'Le jeton API doit porter "Workers Scripts : Edit".',
+  );
+}
+
+async function main() {
   console.log('Deploiement Crea vers Cloudflare Workers');
 
   step('Verification des variables');
@@ -208,6 +286,9 @@ function main() {
   console.log(migrated.output.trimEnd());
   ok('schema distant a jour');
 
+  step('Sous-domaine workers.dev');
+  await ensureWorkersSubdomain();
+
   step('Deploiement');
   const deployed = wrangler(['deploy']);
   console.log(deployed.output.trimEnd());
@@ -253,4 +334,6 @@ function main() {
   }
 }
 
-main();
+main().catch((error) => {
+  fail(error instanceof Error ? error.message : String(error));
+});
