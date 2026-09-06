@@ -4,6 +4,7 @@ import { HTTPException } from 'hono/http-exception';
 
 import { allowedOrigins, isDevelopment, type AppBindings } from './env.js';
 import { ApiError } from './lib/http.js';
+import { isMailerConfigured } from './lib/mailer.js';
 import { aiRoutes } from './routes/ai.js';
 import { authRoutes } from './routes/auth.js';
 import { mediaRoutes } from './routes/media.js';
@@ -41,6 +42,9 @@ app.get('/api/health', async (c) => {
     r2: Boolean(c.env.MEDIA_BUCKET),
     anthropic: Boolean(c.env.ANTHROPIC_API_KEY),
     session: Boolean(c.env.SESSION_SECRET),
+    // Sans cet envoi, personne ne peut se connecter en production : le
+    // diagnostic doit le montrer au meme titre que la base.
+    mail: isMailerConfigured(c.env),
   };
   try {
     await c.env.DB.prepare('SELECT 1').first();

@@ -8,7 +8,7 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "tsc src/lib/sigv4.ts src/lib/crypto.ts src/lib/slug.ts --outDir dist-test --rootDir src --module esnext --target es2022 --moduleResolution bundler --lib es2023,dom --skipLibCheck && node --test test/*.test.mjs",
+    "test": "tsc src/lib/sigv4.ts src/lib/crypto.ts src/lib/slug.ts src/lib/mailer.ts --outDir dist-test --rootDir src --module esnext --target es2022 --moduleResolution bundler --lib es2023,dom --skipLibCheck && node --test test/*.test.mjs",
     "db:create": "wrangler d1 create crea",
     "db:migrate:local": "wrangler d1 migrations apply crea --local",
     "db:migrate:remote": "wrangler d1 migrations apply crea --remote",

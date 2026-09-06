@@ -97,8 +97,10 @@ magic link s'affiche directement dans la page.
 | | `R2_ACCOUNT_ID`, `R2_BUCKET_NAME` | Cible des URL presignees |
 | | `ANTHROPIC_MODEL` | `claude-opus-5` par defaut |
 | | `SIGNUP_IA_POINTS` | Credit offert a l'inscription |
+| | `MAIL_FROM` | Expediteur des liens de connexion |
 | `apps/api/.dev.vars` | `SESSION_SECRET` | Cle HMAC des sessions |
 | | `ANTHROPIC_API_KEY` | Cle du moteur IA |
+| | `RESEND_API_KEY` | Cle d'envoi des emails |
 | | `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` | Jeton S3 de R2 |
 | `apps/web/.env` | `PUBLIC_API_URL` | URL de l'API |
 
@@ -202,7 +204,7 @@ Format d'erreur unique : `{ "error": { "code", "message", "details"? } }`.
 
 | Methode | Route | Effet |
 | --- | --- | --- |
-| `POST` | `/api/auth/magic-link` | Emet un lien. Reponse identique que le compte existe ou non (pas d'enumeration). En dev, renvoie `devLink`. |
+| `POST` | `/api/auth/magic-link` | Emet un lien et l'envoie par email. Reponse identique que le compte existe ou non (pas d'enumeration). En dev, renvoie `devLink` au lieu d'envoyer. `503` si l'envoi n'est pas configure, `502` s'il echoue. |
 | `POST` | `/api/auth/verify` | Consomme le jeton (usage unique, atomique) et emet une session JWT HS256 — cookie **et** `Bearer`. |
 | `GET` | `/api/auth/me` | Compte + solde de points. |
 | `POST` | `/api/auth/logout` | Efface le cookie. |
@@ -424,10 +426,11 @@ deploie le builder** avec l URL reelle de celle-ci, puis recale les URL et
 redeploie l API si besoin. `SESSION_SECRET` n est genere que s il manque — le
 regenerer deconnecterait tous les comptes.
 
-La cle Anthropic est acceptee sous `CREA_ANTHROPIC_API_KEY` ou
-`ANTHROPIC_API_KEY` : le nom exact du secret ne decide pas si le moteur IA
-fonctionne. Si le builder ne peut pas etre deploye, le workflow previent sans
-echouer — l API reste en ligne.
+Chaque cle est acceptee sous deux noms — `CREA_ANTHROPIC_API_KEY` ou
+`ANTHROPIC_API_KEY`, `CREA_RESEND_API_KEY` ou `RESEND_API_KEY` : le nom exact du
+secret ne decide pas si une fonction marche. Ce qui manque est nomme dans le
+journal, avec ce que cela empeche. Si le builder ne peut pas etre deploye, le
+workflow previent sans echouer — l API reste en ligne.
 
 `wrangler.toml` est modifie dans le poste de travail du workflow uniquement,
 jamais recommite : chaque execution repart du depot.
@@ -471,9 +474,27 @@ Pour servir le builder ailleurs (domaine personnalise), definir la variable
 `CREA_SITE_URL` : elle prime sur l URL `workers.dev` et devient l origine
 autorisee par le CORS.
 
-### Reste a faire a la main
+### Envoi des emails
 
-Brancher l envoi du magic link par email : le `TODO` est dans
-`apps/api/src/routes/auth.ts`, le lien y est deja construit. Tant que ce n est
-pas fait, en production le lien n est ni renvoye ni envoye — seul le journal du
-Worker en garde la trace.
+Le lien de connexion part par [Resend](https://resend.com). Un seul secret est
+necessaire :
+
+```bash
+npx wrangler secret put RESEND_API_KEY   # ou le secret GitHub CREA_RESEND_API_KEY
+```
+
+Sans lui, `/api/auth/magic-link` repond **503 `not_configured`** plutot que de
+faire croire a un envoi. `/api/health` expose le meme etat sous la cle `mail`.
+
+L expediteur par defaut, `onboarding@resend.dev`, est verifie d office par
+Resend mais **n envoie qu a l adresse du compte Resend**. Des que d autres
+personnes doivent se connecter, verifier un domaine chez Resend puis definir la
+variable `MAIL_FROM` (ou `CREA_MAIL_FROM` cote GitHub) :
+
+```
+MAIL_FROM = "Crea <bonjour@mondomaine.fr>"
+```
+
+Un echec d envoi renvoie **502 `upstream_error`**. Le lien lui-meme n apparait
+jamais dans les journaux : quiconque y aurait acces prendrait la main sur le
+compte.

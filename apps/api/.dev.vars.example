@@ -6,6 +6,10 @@ SESSION_SECRET="changer-cette-valeur-en-local"
 # Cle API Anthropic (console.anthropic.com).
 ANTHROPIC_API_KEY=""
 
+# Cle API Resend (resend.com > API Keys) — envoi des liens de connexion.
+# Inutile en local : `wrangler dev` renvoie le lien directement dans la reponse.
+RESEND_API_KEY=""
+
 # Jeton R2 S3 (Cloudflare > R2 > Manage API tokens) — requis pour les URL presignees.
 # Sans ces cles, l upload retombe automatiquement sur /api/media/upload (via le Worker).
 R2_ACCESS_KEY_ID=""

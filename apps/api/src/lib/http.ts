@@ -44,6 +44,10 @@ export const tooManyRequests = (message: string): ApiError =>
 export const serverError = (message: string, details?: unknown): ApiError =>
   new ApiError(500, 'server_error', message, details);
 
+/** Un service tiers a repondu, mais mal : la panne n est pas la notre. */
+export const badGateway = (message: string): ApiError =>
+  new ApiError(502, 'upstream_error', message);
+
 export const notConfigured = (message: string): ApiError =>
   new ApiError(503, 'not_configured', message);
 
