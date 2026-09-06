@@ -1,6 +1,14 @@
 import type { AnyBlockNode, BlockStyles, DeepPartialStyles } from '@crea/schema';
 
-import { BoxField, ColorField, NumberField, Section, SelectField, TextField } from './Fields.js';
+import {
+  BoxField,
+  ColorField,
+  NumberField,
+  Section,
+  SelectField,
+  TextField,
+  type InspectorMode,
+} from './Fields.js';
 
 const DISPLAY_OPTIONS = [
   { value: 'block', label: 'Bloc' },
@@ -51,11 +59,17 @@ const BORDER_STYLE_OPTIONS = [
 
 interface StyleFieldsProps {
   node: AnyBlockNode;
+  mode: InspectorMode;
   onChange: (patch: DeepPartialStyles) => void;
 }
 
-/** Edition manuelle des styles : marges, couleurs, typographie, mise en page. */
-export function StyleFields({ node, onChange }: StyleFieldsProps): React.ReactElement {
+/**
+ * Edition manuelle des styles. En simple : couleurs, taille de texte, arrondi —
+ * ce qu on retouche sans reflechir. Le reste (mise en page, dimensions, ombres)
+ * est le terrain de l IA ou du mode avance : le vocabulaire CSS brut n aide
+ * personne qui ne code pas.
+ */
+export function StyleFields({ node, mode, onChange }: StyleFieldsProps): React.ReactElement {
   const styles: BlockStyles = node.styles;
   const layout = styles.layout ?? {};
   const size = styles.size ?? {};
@@ -64,6 +78,49 @@ export function StyleFields({ node, onChange }: StyleFieldsProps): React.ReactEl
   const background = styles.background ?? {};
   const border = styles.border ?? {};
   const effects = styles.effects ?? {};
+
+  if (mode === 'simple') {
+    return (
+      <>
+        <Section title="Fond">
+          <ColorField
+            label="Couleur de fond"
+            value={background.color}
+            onChange={(color) => onChange({ background: { color } })}
+          />
+        </Section>
+
+        <Section title="Texte">
+          <ColorField
+            label="Couleur du texte"
+            value={typography.color}
+            onChange={(color) => onChange({ typography: { color } })}
+          />
+          <TextField
+            label="Taille"
+            value={typography.fontSize ?? ''}
+            placeholder="17px"
+            onChange={(fontSize) => onChange({ typography: { fontSize } })}
+          />
+          <SelectField
+            label="Alignement"
+            value={typography.textAlign}
+            options={TEXT_ALIGN_OPTIONS}
+            onChange={(textAlign) => onChange({ typography: { textAlign } })}
+          />
+        </Section>
+
+        <Section title="Coins arrondis">
+          <TextField
+            label="Arrondi"
+            value={border.radius ?? ''}
+            placeholder="10px"
+            onChange={(radius) => onChange({ border: { radius } })}
+          />
+        </Section>
+      </>
+    );
+  }
 
   return (
     <>

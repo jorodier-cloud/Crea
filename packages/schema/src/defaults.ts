@@ -108,9 +108,9 @@ const BASE_STYLES: { [K in BlockType]: () => BlockStyles } = {
 };
 
 export const DEFAULT_BLOCK_LABEL: Record<BlockType, string> = {
-  container: 'Conteneur',
+  container: 'Section',
   text: 'Texte',
-  media: 'Media',
+  media: 'Image ou video',
   button: 'Bouton',
   calendar: 'Calendrier',
   form: 'Formulaire',

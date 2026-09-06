@@ -3,7 +3,7 @@ import { BLOCK_TYPES, DEFAULT_BLOCK_LABEL, type BlockType } from '@crea/schema';
 import { useBuilderStore } from '../../store/builderStore.js';
 
 const DESCRIPTIONS: Record<BlockType, string> = {
-  container: 'Section, grille, colonne',
+  container: 'Regroupe plusieurs blocs',
   text: 'Titre, paragraphe, citation',
   media: 'Image ou video',
   button: 'Appel a l action',
