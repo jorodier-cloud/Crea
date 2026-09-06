@@ -3,7 +3,9 @@ import test from 'node:test';
 
 import {
   anthropicKeyMissing,
+  describeKeySources,
   missingEnvVars,
+  resolveAnthropicKey,
   planSecrets,
   planUrlUpdates,
   readSubdomainCreation,
@@ -47,6 +49,39 @@ test('anthropicKeyMissing distingue les trois situations', () => {
   assert.equal(anthropicKeyMissing(EMPTY_SECRETS), true);
   assert.equal(anthropicKeyMissing(EMPTY_SECRETS, { ANTHROPIC_API_KEY: 'sk' }), false);
   assert.equal(anthropicKeyMissing(WITH_BOTH), false);
+});
+
+test('la cle Anthropic est acceptee sous ses deux noms', () => {
+  assert.equal(resolveAnthropicKey({ CREA_ANTHROPIC_API_KEY: 'sk-prefixe' }), 'sk-prefixe');
+  assert.equal(resolveAnthropicKey({ ANTHROPIC_API_KEY: 'sk-simple' }), 'sk-simple');
+
+  // Le nom prefixe l emporte : c est celui que documente le depot.
+  assert.equal(
+    resolveAnthropicKey({ CREA_ANTHROPIC_API_KEY: 'sk-prefixe', ANTHROPIC_API_KEY: 'sk-simple' }),
+    'sk-prefixe',
+  );
+});
+
+test('un secret vide ou blanc compte comme absent', () => {
+  // GitHub transmet une chaine vide, pas `undefined`, quand le secret n existe pas.
+  assert.equal(resolveAnthropicKey({ CREA_ANTHROPIC_API_KEY: '', ANTHROPIC_API_KEY: '  ' }), '');
+  assert.equal(resolveAnthropicKey({}), '');
+  assert.equal(resolveAnthropicKey(), '');
+
+  // Le nom vide ne masque pas l autre.
+  assert.equal(
+    resolveAnthropicKey({ CREA_ANTHROPIC_API_KEY: '   ', ANTHROPIC_API_KEY: 'sk-simple' }),
+    'sk-simple',
+  );
+});
+
+test('le diagnostic nomme les variables sans reveler les valeurs', () => {
+  const sources = describeKeySources({ ANTHROPIC_API_KEY: 'sk-secrete' });
+  assert.deepEqual(sources, [
+    { name: 'CREA_ANTHROPIC_API_KEY', present: false },
+    { name: 'ANTHROPIC_API_KEY', present: true },
+  ]);
+  assert.ok(!JSON.stringify(sources).includes('sk-secrete'));
 });
 
 const CONFIG = `[vars]

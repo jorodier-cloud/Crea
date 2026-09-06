@@ -13,6 +13,7 @@
  *   CLOUDFLARE_ACCOUNT_ID   lu directement par wrangler
  *   CREA_D1_DATABASE_ID     optionnel — sinon la base est creee au besoin
  *   CREA_ANTHROPIC_API_KEY  optionnel — sans elle le moteur IA renvoie 503
+ *                           (ANTHROPIC_API_KEY est accepte comme repli)
  *   CREA_SITE_URL           optionnel — domaine du builder, pour le CORS
  *   CREA_WORKERS_SUBDOMAIN  optionnel — nom workers.dev du compte (defaut : crea)
  */
@@ -24,7 +25,9 @@ import { fileURLToPath } from 'node:url';
 
 import {
   anthropicKeyMissing,
+  describeKeySources,
   missingEnvVars,
+  resolveAnthropicKey,
   planSecrets,
   planUrlUpdates,
   readSubdomainCreation,
@@ -265,9 +268,8 @@ async function main() {
 
   step('Secrets du Worker');
   const listed = wrangler(['secret', 'list'], { allowFailure: true });
-  const plan = planSecrets(listed.output, {
-    ANTHROPIC_API_KEY: process.env.CREA_ANTHROPIC_API_KEY?.trim(),
-  });
+  const anthropicKey = resolveAnthropicKey(process.env);
+  const plan = planSecrets(listed.output, { ANTHROPIC_API_KEY: anthropicKey });
 
   for (const secret of plan) {
     wrangler(['secret', 'put', secret.name], { input: `${secret.value}\n` });
@@ -275,10 +277,17 @@ async function main() {
   }
   if (plan.length === 0) ok('rien a poser, secrets deja en place');
 
-  if (anthropicKeyMissing(listed.output, {
-    ANTHROPIC_API_KEY: process.env.CREA_ANTHROPIC_API_KEY?.trim(),
-  })) {
-    warn('ANTHROPIC_API_KEY absente : le moteur IA repondra 503.');
+  if (anthropicKeyMissing(listed.output, { ANTHROPIC_API_KEY: anthropicKey })) {
+    // Nommer les variables consultees evite la chasse au secret mal nomme :
+    // le log dit exactement ce que le runner a recu, sans reveler de valeur.
+    const seen = describeKeySources(process.env)
+      .map(({ name, present }) => `${name}=${present ? 'fournie' : 'vide'}`)
+      .join(', ');
+    warn(
+      `ANTHROPIC_API_KEY absente : le moteur IA repondra 503. Variables lues : ${seen}. ` +
+        'Le secret GitHub doit se trouver dans Settings > Secrets and variables > Actions, ' +
+        'onglet Secrets, sous l un de ces deux noms.',
+    );
   }
 
   step('Migrations D1');

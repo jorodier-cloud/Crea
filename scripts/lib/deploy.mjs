@@ -41,6 +41,40 @@ export function planSecrets(existingSecretsOutput, available = {}) {
   return plan;
 }
 
+/**
+ * Noms sous lesquels la cle Anthropic peut arriver, par ordre de priorite.
+ *
+ * Le prefixe `CREA_` evite toute collision avec les variables du SDK, mais rien
+ * n empeche de nommer le secret GitHub `ANTHROPIC_API_KEY` tout court : un
+ * deploiement qui echoue parce que le secret porte l autre nom coute une
+ * demi-heure de recherche pour rien.
+ */
+export const ANTHROPIC_KEY_NAMES = ['CREA_ANTHROPIC_API_KEY', 'ANTHROPIC_API_KEY'];
+
+/**
+ * Retourne la premiere cle Anthropic reellement fournie, ou une chaine vide.
+ * Les valeurs vides ou blanches sont traitees comme absentes : un secret
+ * GitHub cree sans valeur arrive comme une chaine vide, pas comme `undefined`.
+ */
+export function resolveAnthropicKey(env = {}) {
+  for (const name of ANTHROPIC_KEY_NAMES) {
+    const value = String(env[name] ?? '').trim();
+    if (value) return value;
+  }
+  return '';
+}
+
+/**
+ * Nomme les variables consultees et celles qui portaient une valeur.
+ * Sert au diagnostic : jamais la valeur, uniquement le nom.
+ */
+export function describeKeySources(env = {}) {
+  return ANTHROPIC_KEY_NAMES.map((name) => ({
+    name,
+    present: String(env[name] ?? '').trim().length > 0,
+  }));
+}
+
 /** Vrai si le moteur IA restera inactif faute de cle. */
 export function anthropicKeyMissing(existingSecretsOutput, available = {}) {
   if (available.ANTHROPIC_API_KEY) return false;

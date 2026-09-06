@@ -38,7 +38,9 @@ jobs:
         env:
           TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          ANTHROPIC: ${{ secrets.CREA_ANTHROPIC_API_KEY }}
+          # Les deux noms sont acceptes : un secret nomme sans le prefixe reste
+          # un secret valide, et le deploiement ne doit pas dependre de ce detail.
+          ANTHROPIC: ${{ secrets.CREA_ANTHROPIC_API_KEY }}${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           # `if` explicites plutot que `[ ... ] && ...` : sous `set -e`, une telle
           # ligne placee en fin de bloc ferait echouer l etape quand la condition
@@ -70,7 +72,7 @@ jobs:
           else
             echo "configured=true" >> "$GITHUB_OUTPUT"
             if [ -z "$ANTHROPIC" ]; then
-              echo "::warning::CREA_ANTHROPIC_API_KEY absente — le moteur IA repondra 503."
+              echo "::warning::Cle Anthropic absente (ni CREA_ANTHROPIC_API_KEY ni ANTHROPIC_API_KEY) — le moteur IA repondra 503. Verifier l onglet *Secrets*, pas *Variables*."
             fi
           fi
 
@@ -94,6 +96,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CREA_D1_DATABASE_ID: ${{ secrets.CREA_D1_DATABASE_ID }}
           CREA_ANTHROPIC_API_KEY: ${{ secrets.CREA_ANTHROPIC_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CREA_SITE_URL: ${{ vars.CREA_SITE_URL }}
           CREA_WORKERS_SUBDOMAIN: ${{ vars.CREA_WORKERS_SUBDOMAIN }}
         run: node scripts/deploy-ci.mjs
