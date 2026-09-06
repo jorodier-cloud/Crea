@@ -3,10 +3,11 @@ import { useEffect, useRef, useState } from 'react';
 import { useBuilderStore, useSelectedNode } from '../../store/builderStore.js';
 import { BlockPalette } from './BlockPalette.js';
 import { LayerTree } from './LayerTree.js';
+import { PagesPanel } from './PagesPanel.js';
 import { PointsGauge } from './PointsGauge.js';
 import { describeSelection, suggestionsFor } from './suggestions.js';
 
-type Tab = 'chat' | 'blocs' | 'calques';
+type Tab = 'chat' | 'blocs' | 'calques' | 'pages';
 
 /** Zone gauche : chat IA, jauge de points, palette de blocs, arborescence. */
 export function LeftPanel(): React.ReactElement {
@@ -36,7 +37,7 @@ export function LeftPanel(): React.ReactElement {
       <PointsGauge />
 
       <nav className="flex border-b border-line text-[12px] font-semibold">
-        {(['chat', 'blocs', 'calques'] as Tab[]).map((item) => (
+        {(['chat', 'blocs', 'calques', 'pages'] as Tab[]).map((item) => (
           <button
             key={item}
             type="button"
@@ -54,6 +55,7 @@ export function LeftPanel(): React.ReactElement {
 
       {tab === 'blocs' && <BlockPalette />}
       {tab === 'calques' && <LayerTree />}
+      {tab === 'pages' && <PagesPanel />}
 
       {tab === 'chat' && (
         <>

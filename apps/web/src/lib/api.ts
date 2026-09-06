@@ -1,4 +1,4 @@
-import type { PageTree, TreeOperation } from '@crea/schema';
+import type { PageTree, SitePage, TreeOperation } from '@crea/schema';
 
 import { clearToken, getToken } from './session.js';
 
@@ -70,7 +70,7 @@ export interface ProjectSummary {
 }
 
 export interface Project extends ProjectSummary {
-  tree: PageTree;
+  pages: SitePage[];
 }
 
 export interface PublishResult {
@@ -155,7 +155,7 @@ export const api = {
   unpublishProject: (id: string) =>
     request<PublishResult>(`/api/projects/${id}/unpublish`, { method: 'POST' }),
 
-  saveProject: (id: string, input: { title?: string; tree?: PageTree }) =>
+  saveProject: (id: string, input: { title?: string; pages?: SitePage[] }) =>
     request<{ project: Project; issues: string[] }>(`/api/projects/${id}`, {
       method: 'PUT',
       body: JSON.stringify(input),
@@ -170,6 +170,7 @@ export const api = {
 
   aiPrompt: (input: {
     projectId: string;
+    pageId: string;
     prompt: string;
     tree: PageTree;
     selectedNodeId?: string | null;
