@@ -385,13 +385,15 @@ machine de developpement n est necessaire : tout se pilote depuis des pages web.
 
 **A faire une fois, au doigt :**
 
-1. **Cloudflare > My Profile > API Tokens** — creer un jeton avec les droits
-   d edition sur Workers, D1 et R2.
+1. **Cloudflare > My Profile > API Tokens** — creer un jeton depuis le modele
+   **Edit Cloudflare Workers**, qui inclut deja Workers Scripts, D1 et R2.
+   Un jeton assemble a la main doit porter au minimum `Workers Scripts : Edit`,
+   `D1 : Edit` et `Workers R2 Storage : Edit`.
 2. **GitHub > Settings > Secrets and variables > Actions** — ajouter :
 
 | Secret | Contenu |
 | --- | --- |
-| `CLOUDFLARE_API_TOKEN` | jeton avec les droits Workers, D1 et R2 |
+| `CLOUDFLARE_API_TOKEN` | jeton du modele *Edit Cloudflare Workers* |
 | `CLOUDFLARE_ACCOUNT_ID` | identifiant de compte Cloudflare |
 | `CREA_ANTHROPIC_API_KEY` | cle du moteur IA — optionnelle |
 

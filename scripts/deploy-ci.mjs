@@ -119,7 +119,7 @@ function resolveDatabaseId() {
     console.error(created.output);
     fail(
       `creation de la base "${DATABASE_NAME}" impossible.`,
-      'Le jeton API doit porter le droit d edition D1 (Account > D1 > Edit).',
+      'Le jeton API doit porter "D1 : Edit" (Cloudflare > My Profile > API Tokens).',
     );
   }
 
@@ -130,7 +130,14 @@ function resolveDatabaseId() {
   return id;
 }
 
-/** Cree le bucket R2 s il manque. Un bucket deja present n est pas une erreur. */
+/**
+ * Cree le bucket R2 s il manque.
+ *
+ * Un echec n interrompt pas le deploiement : sans droit R2, le jeton ne peut ni
+ * creer ni lister, donc on ne peut pas savoir si le bucket existe deja. Or un
+ * bucket cree a la main se lie tres bien avec un jeton limite aux Workers.
+ * C est `wrangler deploy` qui tranchera — lui saura si la liaison est valide.
+ */
 function ensureBucket() {
   const created = wrangler(['r2', 'bucket', 'create', BUCKET_NAME], { allowFailure: true });
 
@@ -143,11 +150,12 @@ function ensureBucket() {
     return;
   }
 
-  console.error(created.output);
-  fail(
-    `creation du bucket "${BUCKET_NAME}" impossible.`,
-    'Le jeton API doit porter le droit d edition R2 (Account > R2 > Edit).',
+  warn(
+    `bucket R2 "${BUCKET_NAME}" non cree — ajoutez "Workers R2 Storage : Edit" au ` +
+      'jeton API, ou creez le bucket a la main. Le deploiement continue : il ' +
+      'echouera plus loin si le bucket manque vraiment.',
   );
+  console.log(created.output.trimEnd());
 }
 
 function main() {
