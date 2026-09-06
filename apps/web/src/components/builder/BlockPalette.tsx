@@ -28,8 +28,9 @@ export function BlockPalette(): React.ReactElement {
   return (
     <div className="flex-1 overflow-y-auto p-3">
       <p className="mb-2 px-1 text-[11px] text-muted">
-        Touchez un bloc pour l ajouter apres la selection. Sur ordinateur, glissez-le sur
-        le canvas pour le placer precisement.
+        Touchez un bloc pour l ajouter apres la selection — vous basculez aussitot sur la
+        page pour le voir. Sur ordinateur, glissez-le sur le canvas pour le placer
+        precisement.
       </p>
       <ul className="space-y-1.5">
         {BLOCK_TYPES.map((type) => (

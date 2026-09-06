@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 
 import { requireSession } from '../../lib/session.js';
-import { useBuilderStore } from '../../store/builderStore.js';
+import { useBuilderStore, type Pane } from '../../store/builderStore.js';
 import { Canvas } from './Canvas.js';
 import { LeftPanel } from './LeftPanel.js';
 import { RightInspector } from './RightInspector.js';
@@ -15,8 +15,6 @@ const AUTOSAVE_DELAY_MS = 2500;
  * alors visible, choisie par la barre du bas. Au-dessus du seuil, rien ne
  * change — les trois colonnes restent affichees ensemble.
  */
-type Pane = 'chat' | 'page' | 'reglages';
-
 const PANES: ReadonlyArray<{ value: Pane; label: string; icon: string }> = [
   { value: 'chat', label: 'Chat IA', icon: '✦' },
   { value: 'page', label: 'Page', icon: '▤' },
@@ -52,9 +50,8 @@ export function Builder({ projectId }: BuilderProps): React.ReactElement {
   const dirty = useBuilderStore((state) => state.dirty);
   const tree = useBuilderStore((state) => state.tree);
   const selectedId = useBuilderStore((state) => state.selectedId);
-
-  // La page est la vue d entree : on ouvre sur ce qu on vient construire.
-  const [pane, setPane] = useState<Pane>('page');
+  const pane = useBuilderStore((state) => state.activePane);
+  const setPane = useBuilderStore((state) => state.setPane);
 
   useEffect(() => {
     if (!requireSession()) return;
