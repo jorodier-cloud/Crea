@@ -60,7 +60,7 @@ jobs:
               echo ""
               echo "| Secret | Ou le trouver |"
               echo "| --- | --- |"
-              echo "| \`CLOUDFLARE_API_TOKEN\` | Cloudflare > My Profile > API Tokens (droits Workers, D1 et R2) |"
+              echo "| \`CLOUDFLARE_API_TOKEN\` | Cloudflare > My Profile > API Tokens — modele **Edit Cloudflare Workers** (il inclut Workers, D1 et R2) |"
               echo "| \`CLOUDFLARE_ACCOUNT_ID\` | Cloudflare > Workers > barre laterale |"
               echo "| \`CREA_ANTHROPIC_API_KEY\` | console.anthropic.com — optionnel |"
               echo ""
