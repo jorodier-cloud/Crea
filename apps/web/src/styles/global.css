@@ -99,3 +99,17 @@
 .crea-canvas-frame *::selection {
   background-color: var(--color-sage-soft);
 }
+
+/* Halo qui signale, sans avoir a lire le message, ce que l IA vient de
+   modifier — s attenue de lui-meme, jamais besoin de le retirer a la main. */
+@keyframes crea-ai-flash {
+  0% {
+    box-shadow: 0 0 0 0 rgba(194, 161, 90, 0.55);
+  }
+  60% {
+    box-shadow: 0 0 0 12px rgba(194, 161, 90, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(194, 161, 90, 0);
+  }
+}

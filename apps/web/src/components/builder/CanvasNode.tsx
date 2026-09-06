@@ -22,10 +22,10 @@ interface CanvasNodeProps {
   isRoot?: boolean;
 }
 
-/** Surbrillance de selection, de survol et indicateur de depot. */
+/** Surbrillance de selection, de survol, clignotement IA et indicateur de depot. */
 function decorate(
   base: CSSProperties,
-  flags: { selected: boolean; hovered: boolean; drop: DropPosition | null },
+  flags: { selected: boolean; hovered: boolean; highlighted: boolean; drop: DropPosition | null },
 ): CSSProperties {
   const style: CSSProperties = { ...base };
 
@@ -35,6 +35,12 @@ function decorate(
   } else if (flags.hovered) {
     style.outline = `1px dashed ${SAGE}`;
     style.outlineOffset = '1px';
+  }
+
+  // Le geste de l IA doit se voir sans lire le message : un halo dore qui
+  // s attenue, distinct du contour de selection.
+  if (flags.highlighted) {
+    style.animation = 'crea-ai-flash 1.6s ease-out';
   }
 
   if (flags.drop === 'inside') {
@@ -52,6 +58,7 @@ function decorate(
 export function CanvasNode({ node, isRoot = false }: CanvasNodeProps): ReactNode {
   const selectedId = useBuilderStore((state) => state.selectedId);
   const hoveredId = useBuilderStore((state) => state.hoveredId);
+  const highlighted = useBuilderStore((state) => state.highlightedIds.includes(node.id));
   const drag = useBuilderStore((state) => state.drag);
   const dropTarget = useBuilderStore((state) => state.dropTarget);
   const select = useBuilderStore((state) => state.select);
@@ -69,6 +76,7 @@ export function CanvasNode({ node, isRoot = false }: CanvasNodeProps): ReactNode
   const style = decorate(nodeToCssProperties(node) as CSSProperties, {
     selected: selectedId === node.id,
     hovered: hoveredId === node.id && selectedId !== node.id,
+    highlighted,
     drop: dropPosition,
   });
 

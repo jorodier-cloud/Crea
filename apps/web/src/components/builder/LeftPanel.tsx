@@ -1,16 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { useBuilderStore } from '../../store/builderStore.js';
+import { useBuilderStore, useSelectedNode } from '../../store/builderStore.js';
 import { BlockPalette } from './BlockPalette.js';
 import { LayerTree } from './LayerTree.js';
 import { PointsGauge } from './PointsGauge.js';
-
-const SUGGESTIONS = [
-  'Ajoute une section galerie avec trois photos',
-  'Rends le titre plus grand et centre',
-  'Ajoute un formulaire de contact sous le hero',
-  'Passe la palette en vert sauge et beige lin',
-];
+import { describeSelection, suggestionsFor } from './suggestions.js';
 
 type Tab = 'chat' | 'blocs' | 'calques';
 
@@ -19,8 +13,9 @@ export function LeftPanel(): React.ReactElement {
   const chat = useBuilderStore((state) => state.chat);
   const aiPending = useBuilderStore((state) => state.aiPending);
   const points = useBuilderStore((state) => state.points);
-  const selectedId = useBuilderStore((state) => state.selectedId);
   const sendPrompt = useBuilderStore((state) => state.sendPrompt);
+  const revertMessage = useBuilderStore((state) => state.revertMessage);
+  const selectedNode = useSelectedNode();
 
   const [tab, setTab] = useState<Tab>('chat');
   const [draft, setDraft] = useState('');
@@ -75,11 +70,23 @@ export function LeftPanel(): React.ReactElement {
                 }
               >
                 <p className="whitespace-pre-wrap">{message.text}</p>
-                {message.role === 'assistant' && message.cost !== undefined && (
-                  <p className="mt-1.5 text-[11px] text-forest-soft/80">
-                    {message.applied ?? 0} operation(s) — {message.cost} pt
-                    {message.cost > 1 ? 's' : ''}
-                  </p>
+                {message.role === 'assistant' && (
+                  <div className="mt-1.5 flex items-center justify-between gap-2">
+                    {message.cost !== undefined && (
+                      <span className="text-[11px] text-forest-soft/70">
+                        {message.cost} pt{message.cost > 1 ? 's' : ''}
+                      </span>
+                    )}
+                    {(message.applied ?? 0) > 0 && message.beforeTree && (
+                      <button
+                        type="button"
+                        onClick={() => revertMessage(message.id)}
+                        className="text-[11px] font-semibold text-forest-soft/70 underline decoration-dotted hover:text-forest"
+                      >
+                        ↺ Revenir a avant
+                      </button>
+                    )}
+                  </div>
                 )}
               </article>
             ))}
@@ -88,21 +95,6 @@ export function LeftPanel(): React.ReactElement {
               <p className="mr-6 animate-pulse rounded-xl bg-linen px-3 py-2 text-[13px] text-muted">
                 Le moteur travaille sur l arbre…
               </p>
-            )}
-
-            {chat.length <= 1 && (
-              <div className="space-y-1.5 pt-2">
-                {SUGGESTIONS.map((suggestion) => (
-                  <button
-                    key={suggestion}
-                    type="button"
-                    onClick={() => submit(suggestion)}
-                    className="w-full rounded-lg border border-line px-3 py-2 text-left text-[12px] text-muted transition-colors hover:border-sage hover:text-forest"
-                  >
-                    {suggestion}
-                  </button>
-                ))}
-              </div>
             )}
           </div>
 
@@ -113,11 +105,35 @@ export function LeftPanel(): React.ReactElement {
               submit(draft);
             }}
           >
-            {selectedId && (
-              <p className="mb-1.5 truncate text-[11px] text-muted">
-                Cible : <span className="font-mono text-forest">{selectedId}</span>
-              </p>
-            )}
+            {/* Change avec la selection : ce que l IA propose de faire suit ce
+                sur quoi on vient de cliquer, plutot que quatre phrases figees.
+                Le fondu a droite signale qu il y a plus a voir en glissant. */}
+            <div
+              className="mb-2 flex gap-1.5 overflow-x-auto pb-1"
+              style={{ maskImage: 'linear-gradient(to right, black calc(100% - 20px), transparent)' }}
+            >
+              {suggestionsFor(selectedNode).map((suggestion) => (
+                <button
+                  key={suggestion}
+                  type="button"
+                  onClick={() => submit(suggestion)}
+                  disabled={aiPending || points <= 0}
+                  className="shrink-0 rounded-full border border-line bg-white px-3 py-1.5 text-[11.5px] whitespace-nowrap text-muted transition-colors hover:border-sage hover:text-forest disabled:opacity-40"
+                >
+                  {suggestion}
+                </button>
+              ))}
+            </div>
+
+            <p className="mb-1.5 truncate text-[11px] text-muted">
+              {selectedNode ? (
+                <>
+                  Cible : <span className="font-semibold text-forest">{describeSelection(selectedNode)}</span>
+                </>
+              ) : (
+                'Aucun bloc selectionne — la demande visera toute la page.'
+              )}
+            </p>
             <textarea
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
