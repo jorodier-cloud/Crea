@@ -161,7 +161,7 @@ export function createStarterTree(title = 'Nouveau site'): PageTree {
   const tree = createEmptyTree(title);
 
   const hero = createNode('container', {
-    name: 'Hero',
+    name: 'Bandeau d accueil',
     content: { tag: 'header', anchor: 'accueil' },
     styles: {
       layout: {
