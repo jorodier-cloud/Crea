@@ -11,7 +11,11 @@ import type { Env } from '../env.js';
 import { badRequest, notConfigured, serverError, tooManyRequests } from '../lib/http.js';
 import { EMPTY_USAGE, type TokenUsage } from './points.js';
 
-const DEFAULT_MODEL = 'claude-opus-5';
+// Sonnet 5 : 60% moins cher qu Opus 5, largement capable pour une sortie JSON
+// stricte accompagnee de texte court. Un modele qui se trompe plus souvent sur
+// le format ne fait pas economiser : les operations rejetees font payer les
+// memes tokens pour moins de resultat utile.
+const DEFAULT_MODEL = 'claude-sonnet-5';
 const MAX_TOKENS = 16_000;
 
 export interface GenerationInput {

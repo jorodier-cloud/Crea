@@ -16,7 +16,7 @@ R2_PUBLIC_BASE_URL = "http://localhost:8787/api/media/file"
 # Compte Cloudflare, requis pour signer les URL S3 de R2.
 R2_ACCOUNT_ID = ""
 R2_BUCKET_NAME = "crea-media"
-ANTHROPIC_MODEL = "claude-opus-5"
+ANTHROPIC_MODEL = "claude-sonnet-5"
 # Expediteur des liens de connexion. Le domaine de test de Resend fonctionne
 # sans verification, mais n envoie qu a l adresse du compte Resend : passer a un
 # domaine verifie des que d autres personnes doivent se connecter.
