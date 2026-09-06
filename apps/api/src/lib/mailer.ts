@@ -124,6 +124,59 @@ export function buildMagicLinkEmail({
   return { subject: 'Votre lien de connexion a Crea', text, html };
 }
 
+/**
+ * Compose la notification d une demande recue par un formulaire.
+ *
+ * Les valeurs viennent d un visiteur inconnu : tout passe par `escapeHtml`.
+ * L adresse de l expediteur, quand elle est fournie, devient le `reply-to` du
+ * message — repondre a une demande doit se faire d un geste.
+ */
+export function buildContactEmail({
+  siteTitle,
+  fields,
+  senderName,
+}: {
+  siteTitle: string;
+  fields: Array<{ label: string; value: string }>;
+  senderName?: string | null;
+}): EmailContent {
+  const subject = senderName
+    ? `Nouvelle demande de ${senderName} — ${siteTitle}`
+    : `Nouvelle demande — ${siteTitle}`;
+
+  const text = [
+    `Demande recue depuis ${siteTitle}.`,
+    '',
+    ...fields.map(({ label, value }) => `${label} : ${value}`),
+  ].join('\n');
+
+  const rows = fields
+    .map(
+      ({ label, value }) => `<tr>
+        <td style="padding:8px 12px 8px 0;vertical-align:top;font-family:Helvetica,Arial,sans-serif;font-size:12px;letter-spacing:0.06em;text-transform:uppercase;color:#8A9A85;white-space:nowrap;">${escapeHtml(label)}</td>
+        <td style="padding:8px 0;vertical-align:top;font-size:15px;line-height:1.6;color:#2F3E34;white-space:pre-wrap;">${escapeHtml(value)}</td>
+      </tr>`,
+    )
+    .join('');
+
+  const html = `<!doctype html>
+<html lang="fr">
+  <body style="margin:0;padding:32px 16px;background:#F5F2EA;font-family:Georgia,'Times New Roman',serif;color:#2F3E34;">
+    <table role="presentation" cellpadding="0" cellspacing="0" style="max-width:560px;margin:0 auto;background:#FDFBF6;border:1px solid #E3DCCB;border-radius:4px;">
+      <tr>
+        <td style="padding:36px 40px;">
+          <p style="margin:0 0 20px;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:#8A9A85;font-family:Helvetica,Arial,sans-serif;">${escapeHtml(siteTitle)}</p>
+          <h1 style="margin:0 0 24px;font-size:24px;font-weight:400;line-height:1.3;">Nouvelle demande</h1>
+          <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;">${rows}</table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
+
+  return { subject, text, html };
+}
+
 export class MailError extends Error {
   readonly status: number;
 
@@ -155,7 +208,7 @@ export function readMailError(status: number, body: string): string {
 /** Envoie un message. Leve `MailError` si Resend refuse. */
 export async function sendEmail(
   env: MailerEnv,
-  { to, subject, text, html }: EmailContent & { to: string },
+  { to, subject, text, html, replyTo }: EmailContent & { to: string; replyTo?: string | null },
 ): Promise<void> {
   const response = await fetch(RESEND_ENDPOINT, {
     method: 'POST',
@@ -163,7 +216,14 @@ export async function sendEmail(
       Authorization: `Bearer ${env.RESEND_API_KEY?.trim() ?? ''}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ from: mailFrom(env), to: [to], subject, text, html }),
+    body: JSON.stringify({
+      from: mailFrom(env),
+      to: [to],
+      subject,
+      text,
+      html,
+      ...(replyTo ? { reply_to: replyTo } : {}),
+    }),
   });
 
   if (!response.ok) {

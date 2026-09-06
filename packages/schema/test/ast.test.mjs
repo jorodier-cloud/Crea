@@ -134,3 +134,53 @@ test('le rendu HTML est deterministe pour une date donnee', () => {
   assert.ok(a.includes('data-date="2026-01-20"'));
   assert.ok(a.includes('is-blocked'));
 });
+
+test('un formulaire sans adresse declaree vise la reception fournie', () => {
+  const tree = createStarterTree();
+  const result = applyOperations(tree, [
+    { op: 'insert', parentId: tree.root.id, node: createNode('form') },
+  ]);
+  const html = renderTreeToHtml(result.tree, { formEndpoint: '/p/rives-ormoy/contact' });
+
+  assert.ok(html.includes('action="/p/rives-ormoy/contact"'));
+  assert.ok(html.includes('method="POST"'));
+  // Le piege a robots et le marqueur de formulaire accompagnent la soumission.
+  assert.ok(html.includes('name="_crea_hp"'));
+  assert.ok(html.includes('name="_crea_form"'));
+});
+
+test('une adresse saisie a la main l emporte sur la reception integree', () => {
+  // Pointer un formulaire vers un service tiers doit rester possible.
+  const tree = createStarterTree();
+  const result = applyOperations(tree, [
+    {
+      op: 'insert',
+      parentId: tree.root.id,
+      node: createNode('form', { content: { endpoint: 'https://exemple.fr/collecte' } }),
+    },
+  ]);
+  const html = renderTreeToHtml(result.tree, { formEndpoint: '/p/rives-ormoy/contact' });
+  assert.ok(html.includes('action="https://exemple.fr/collecte"'));
+  assert.ok(!html.includes('/p/rives-ormoy/contact'));
+});
+
+test('sans reception fournie, un formulaire ne mene nulle part plutot qu ailleurs', () => {
+  const tree = createStarterTree();
+  const result = applyOperations(tree, [
+    { op: 'insert', parentId: tree.root.id, node: createNode('form') },
+  ]);
+  assert.ok(renderTreeToHtml(result.tree).includes('action="#"'));
+});
+
+test('un formulaire imbrique recoit la meme reception que la racine', () => {
+  const tree = createStarterTree();
+  const withSection = applyOperations(tree, [
+    { op: 'insert', parentId: tree.root.id, node: createNode('container') },
+  ]);
+  const section = withSection.tree.root.children.at(-1);
+  const result = applyOperations(withSection.tree, [
+    { op: 'insert', parentId: section.id, node: createNode('form') },
+  ]);
+  const html = renderTreeToHtml(result.tree, { formEndpoint: '/p/rives-ormoy/contact' });
+  assert.ok(html.includes('action="/p/rives-ormoy/contact"'));
+});
