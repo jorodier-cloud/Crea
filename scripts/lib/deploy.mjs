@@ -114,6 +114,21 @@ export function missingOptionalSecrets(existingSecretsOutput, available = {}) {
 }
 
 /**
+ * URL publique d un Worker sur son sous-domaine workers.dev.
+ *
+ * Sert a configurer le CORS *avant* le premier deploiement plutot qu apres.
+ * Recaler ensuite laissait, a chaque mise a jour, une dizaine de secondes
+ * pendant lesquelles l API en ligne n autorisait que `localhost` : toute
+ * requete du builder etait alors rejetee, sans reponse exploitable cote
+ * navigateur. La prediction reste verifiee apres coup contre l URL reelle.
+ */
+export function predictWorkerUrl(name, subdomain) {
+  const clean = String(subdomain ?? '').trim();
+  if (!clean || !String(name ?? '').trim()) return '';
+  return `https://${String(name).trim()}.${clean}.workers.dev`;
+}
+
+/**
  * Calcule les valeurs a recaler une fois l URL du Worker connue.
  * Ne renvoie que ce qui change reellement.
  */
