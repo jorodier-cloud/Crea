@@ -38,8 +38,11 @@ export function TopBar(): React.ReactElement {
   const projectId = useBuilderStore((state) => state.projectId);
 
   return (
-    <header className="crea-panel flex h-14 shrink-0 items-center gap-4 border-b px-4">
-      <a href="/projects" className="font-display text-xl leading-none text-forest">
+    <header className="crea-panel flex h-14 shrink-0 items-center gap-2 border-b px-3 lg:gap-4 lg:px-4">
+      <a
+        href="/projects"
+        className="hidden font-display text-xl leading-none text-forest sm:block"
+      >
         Crea
       </a>
 
@@ -47,10 +50,12 @@ export function TopBar(): React.ReactElement {
         value={title}
         onChange={(event) => setTitle(event.target.value)}
         aria-label="Titre du projet"
-        className="w-56 rounded border border-transparent px-2 py-1 text-[14px] font-semibold text-ink hover:border-line focus:border-sage focus:outline-none"
+        className="min-w-0 flex-1 rounded border border-transparent px-2 py-1 text-[14px] font-semibold text-ink hover:border-line focus:border-sage focus:outline-none lg:w-56 lg:flex-none"
       />
 
-      <div className="flex overflow-hidden rounded-full border border-line text-[12px]">
+      {/* Le selecteur de largeur n a pas de sens sur un ecran etroit : le
+          canvas y occupe deja toute la place disponible. */}
+      <div className="hidden overflow-hidden rounded-full border border-line text-[12px] lg:flex">
         {VIEWPORTS.map((item) => (
           <button
             key={item.value}
@@ -65,7 +70,7 @@ export function TopBar(): React.ReactElement {
         ))}
       </div>
 
-      <div className="flex gap-1">
+      <div className="flex shrink-0 gap-1">
         <button
           type="button"
           onClick={undo}
@@ -86,16 +91,26 @@ export function TopBar(): React.ReactElement {
         </button>
       </div>
 
-      <span className="ml-auto text-[12px] text-muted">
+      <span className="ml-auto hidden text-[12px] text-muted lg:inline">
         {saveLabel(saveStatus, dirty, lastSavedAt)}
       </span>
+
+      {/* Faute de place pour la phrase, l ecran etroit recoit une pastille :
+          doree tant qu il reste des modifications, sauge une fois ecrites. */}
+      <span
+        title={saveLabel(saveStatus, dirty, lastSavedAt)}
+        aria-label={saveLabel(saveStatus, dirty, lastSavedAt)}
+        className={`ml-auto h-2 w-2 shrink-0 rounded-full lg:hidden ${
+          saveStatus === 'error' ? 'bg-[#B4553F]' : dirty ? 'bg-gold' : 'bg-sage'
+        }`}
+      />
 
       {projectId && (
         <a
           href={`/preview?id=${projectId}`}
           target="_blank"
           rel="noopener"
-          className="crea-btn crea-btn-ghost"
+          className="crea-btn crea-btn-ghost hidden lg:inline-flex"
         >
           Apercu
         </a>
@@ -105,7 +120,8 @@ export function TopBar(): React.ReactElement {
         type="button"
         onClick={() => void save()}
         disabled={!dirty || saveStatus === 'saving'}
-        className="crea-btn crea-btn-ghost"
+        title={saveLabel(saveStatus, dirty, lastSavedAt)}
+        className="crea-btn crea-btn-ghost hidden shrink-0 lg:inline-flex"
       >
         Enregistrer
       </button>
@@ -120,7 +136,7 @@ export function TopBar(): React.ReactElement {
           clearToken();
           window.location.href = '/login';
         }}
-        className="text-[12px] text-muted hover:text-forest"
+        className="hidden text-[12px] text-muted hover:text-forest lg:inline"
       >
         Quitter
       </button>

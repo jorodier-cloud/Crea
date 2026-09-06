@@ -33,6 +33,7 @@ import {
   missingOptionalSecrets,
   planSecrets,
   planUrlUpdates,
+  predictWorkerUrl,
   readSubdomainCreation,
   readSubdomainState,
   resolveSecrets,
@@ -54,6 +55,9 @@ const WRANGLER = join(ROOT, 'node_modules', '.bin', 'wrangler');
 
 const REQUIRED = ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID'];
 const DATABASE_NAME = 'crea';
+// Doivent rester alignes sur le champ `name` des deux wrangler.toml.
+const API_WORKER_NAME = 'crea-api';
+const WEB_WORKER_NAME = 'crea-web';
 const BUCKET_NAME = 'crea-media';
 const DEFAULT_SUBDOMAIN = 'crea';
 
@@ -213,11 +217,15 @@ function ensureBucket() {
 }
 
 /**
- * Enregistre le sous-domaine workers.dev du compte s il n en a pas.
+ * Enregistre le sous-domaine workers.dev du compte s il n en a pas, et retourne
+ * son nom — ou `null` s il reste indetermine.
  *
  * Sans lui, Cloudflare accepte l upload du Worker mais refuse de le publier :
  * le code part, rien n est joignable. Le nom est global au compte et durable,
  * d ou la variable `CREA_WORKERS_SUBDOMAIN` pour le choisir explicitement.
+ *
+ * Le nom sert aussi a prevoir les URL avant tout deploiement, ce qui evite de
+ * publier une configuration provisoire (voir `predictWorkerUrl`).
  *
  * Endpoints et codes d erreur repris de l implementation de wrangler
  * (`deploy-helpers/src/triggers/subdomain.ts`) : 10007 = aucun sous-domaine,
@@ -237,7 +245,7 @@ async function ensureWorkersSubdomain() {
 
   if (current.state === 'registered') {
     ok(`sous-domaine deja enregistre : ${current.subdomain}.workers.dev`);
-    return;
+    return current.subdomain;
   }
 
   if (current.state === 'unreadable') {
@@ -247,7 +255,7 @@ async function ensureWorkersSubdomain() {
       `etat du sous-domaine workers.dev illisible (${JSON.stringify(current.errors)}). ` +
         'Le deploiement continue.',
     );
-    return;
+    return null;
   }
 
   const wanted = toValidSubdomain(process.env.CREA_WORKERS_SUBDOMAIN || DEFAULT_SUBDOMAIN);
@@ -268,7 +276,7 @@ async function ensureWorkersSubdomain() {
 
   if (created.state === 'created') {
     ok(`sous-domaine "${wanted}.workers.dev" enregistre pour le compte`);
-    return;
+    return wanted;
   }
 
   if (created.state === 'taken') {
@@ -350,7 +358,31 @@ async function main() {
   ok('schema distant a jour');
 
   step('Sous-domaine workers.dev');
-  await ensureWorkersSubdomain();
+  const subdomain = await ensureWorkersSubdomain();
+
+  // Les URL sont prevues *avant* le premier deploiement. Les recaler seulement
+  // apres coup publiait, a chaque mise a jour, une API n autorisant que
+  // `localhost` pendant une dizaine de secondes : le builder recevait alors un
+  // refus CORS, sans reponse exploitable. La prediction est verifiee plus bas
+  // contre l URL reelle.
+  step('URL publiques');
+  const predictedApi = predictWorkerUrl(API_WORKER_NAME, subdomain);
+  const predictedSite = resolveSiteUrl({
+    configured: process.env.CREA_SITE_URL,
+    deployed: predictWorkerUrl(WEB_WORKER_NAME, subdomain),
+  });
+
+  if (predictedApi) {
+    const planned = planUrlUpdates({ workerUrl: predictedApi, siteUrl: predictedSite, config });
+    for (const [key, value] of Object.entries(planned)) {
+      patch(key, value);
+      ok(`${key} = ${value}`);
+    }
+    writeFileSync(CONFIG_PATH, config, 'utf8');
+    if (Object.keys(planned).length === 0) ok('URL deja correctes');
+  } else {
+    warn('sous-domaine inconnu : les URL seront recalees apres le deploiement.');
+  }
 
   step('Deploiement');
   const deployed = wrangler(['deploy']);
@@ -366,9 +398,9 @@ async function main() {
   step('Site du builder');
   const builderUrl = deployWebApp(workerUrl);
 
-  // Le CORS est recale en dernier : il doit autoriser l origine reelle du
-  // builder, qui n est connue qu une fois celui-ci deploye.
-  step('Recalage des URL');
+  // Filet de securite : si une URL reelle dementait la prediction, on recale et
+  // on redeploie. Dans le cas normal cette etape ne fait rien.
+  step('Verification des URL');
   const siteUrl = resolveSiteUrl({
     configured: process.env.CREA_SITE_URL,
     deployed: builderUrl,
@@ -377,7 +409,7 @@ async function main() {
 
   const keys = Object.keys(updates);
   if (keys.length === 0) {
-    ok('URL deja correctes');
+    ok('URL prevues confirmees, aucun redeploiement');
   } else {
     for (const [key, value] of Object.entries(updates)) {
       patch(key, value);
@@ -386,7 +418,7 @@ async function main() {
     writeFileSync(CONFIG_PATH, config, 'utf8');
     const second = wrangler(['deploy']);
     console.log(second.output.trimEnd());
-    ok('redeploye avec la configuration definitive');
+    ok('redeploye avec la configuration corrigee');
   }
 
   step('Verification');

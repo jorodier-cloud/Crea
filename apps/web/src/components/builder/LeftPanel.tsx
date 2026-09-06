@@ -37,7 +37,7 @@ export function LeftPanel(): React.ReactElement {
   };
 
   return (
-    <aside className="crea-panel flex w-[340px] shrink-0 flex-col border-r">
+    <aside className="crea-panel flex w-full min-w-0 flex-col border-r lg:w-[340px] lg:shrink-0">
       <PointsGauge />
 
       <nav className="flex border-b border-line text-[12px] font-semibold">
@@ -137,7 +137,7 @@ export function LeftPanel(): React.ReactElement {
               className="crea-input resize-none"
             />
             <div className="mt-2 flex items-center justify-between">
-              <span className="text-[11px] text-muted">Ctrl + Entree</span>
+              <span className="hidden text-[11px] text-muted lg:inline">Ctrl + Entree</span>
               <button
                 type="submit"
                 disabled={aiPending || points <= 0 || draft.trim().length === 0}

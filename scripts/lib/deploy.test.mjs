@@ -7,6 +7,7 @@ import {
   missingOptionalSecrets,
   planSecrets,
   planUrlUpdates,
+  predictWorkerUrl,
   readSubdomainCreation,
   readSubdomainState,
   resolveSecret,
@@ -134,6 +135,36 @@ test('le diagnostic nomme les variables sans reveler les valeurs', () => {
     { name: 'RESEND_API_KEY', present: false },
   ]);
   assert.ok(!JSON.stringify(sources).includes('sk-secrete'));
+});
+
+test('l URL d un Worker se deduit de son nom et du sous-domaine', () => {
+  assert.equal(
+    predictWorkerUrl('crea-api', 'jinogui'),
+    'https://crea-api.jinogui.workers.dev',
+  );
+  assert.equal(predictWorkerUrl('crea-web', ' jinogui '), 'https://crea-web.jinogui.workers.dev');
+});
+
+test('sans sous-domaine connu, aucune URL n est inventee', () => {
+  // Une URL fausse posee dans APP_ORIGINS fermerait le CORS a la vraie origine.
+  assert.equal(predictWorkerUrl('crea-api', ''), '');
+  assert.equal(predictWorkerUrl('crea-api', null), '');
+  assert.equal(predictWorkerUrl('crea-api', '   '), '');
+  assert.equal(predictWorkerUrl('', 'jinogui'), '');
+});
+
+test('une URL prevue exacte ne declenche aucun redeploiement', () => {
+  // C est la garantie recherchee : la configuration publiee avant deploiement
+  // est deja la bonne, donc la verification qui suit ne trouve rien a changer.
+  const subdomain = 'jinogui';
+  const workerUrl = predictWorkerUrl('crea-api', subdomain);
+  const siteUrl = predictWorkerUrl('crea-web', subdomain);
+
+  const settled = `[vars]
+APP_ORIGINS = "${siteUrl},http://localhost:4321"
+R2_PUBLIC_BASE_URL = "${workerUrl}/api/media/file"
+`;
+  assert.deepEqual(planUrlUpdates({ workerUrl, siteUrl, config: settled }), {});
 });
 
 const CONFIG = `[vars]

@@ -21,13 +21,14 @@ export function RightInspector(): React.ReactElement {
   const renameBlock = useBuilderStore((state) => state.renameBlock);
   const removeBlock = useBuilderStore((state) => state.removeBlock);
   const duplicateBlock = useBuilderStore((state) => state.duplicateBlock);
+  const nudgeBlock = useBuilderStore((state) => state.nudgeBlock);
   const rootId = useBuilderStore((state) => state.tree.root.id);
 
   const [tab, setTab] = useState<Tab>('contenu');
 
   if (!node) {
     return (
-      <aside className="crea-panel w-[320px] shrink-0 border-l p-6">
+      <aside className="crea-panel w-full min-w-0 border-l p-6 lg:w-[320px] lg:shrink-0">
         <p className="text-[13px] leading-relaxed text-muted">
           Selectionnez un bloc dans le canvas pour en modifier le contenu, le style et les
           actions.
@@ -39,7 +40,7 @@ export function RightInspector(): React.ReactElement {
   const isRoot = node.id === rootId;
 
   return (
-    <aside className="crea-panel flex w-[320px] shrink-0 flex-col border-l">
+    <aside className="crea-panel flex w-full min-w-0 flex-col border-l lg:w-[320px] lg:shrink-0">
       <header className="border-b border-line px-4 py-3">
         <div className="flex items-center justify-between gap-2">
           <span className="rounded bg-linen px-2 py-0.5 text-[11px] font-semibold text-forest">
@@ -90,7 +91,28 @@ export function RightInspector(): React.ReactElement {
       </div>
 
       {!isRoot && (
-        <footer className="flex gap-2 border-t border-line p-3">
+        <footer className="space-y-2 border-t border-line p-3">
+          {/* Le glisser-deposer HTML5 n existe pas au doigt : sans ces deux
+              boutons, reorganiser une page depuis un telephone serait
+              impossible. Ils servent aussi au clavier. */}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className="crea-btn crea-btn-ghost flex-1"
+              onClick={() => nudgeBlock(node.id, -1)}
+            >
+              ↑ Monter
+            </button>
+            <button
+              type="button"
+              className="crea-btn crea-btn-ghost flex-1"
+              onClick={() => nudgeBlock(node.id, 1)}
+            >
+              ↓ Descendre
+            </button>
+          </div>
+
+          <div className="flex gap-2">
           <button
             type="button"
             className="crea-btn crea-btn-ghost flex-1"
@@ -105,6 +127,7 @@ export function RightInspector(): React.ReactElement {
           >
             Supprimer
           </button>
+          </div>
         </footer>
       )}
     </aside>
