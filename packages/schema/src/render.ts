@@ -81,11 +81,18 @@ function styleAttr(node: AnyBlockNode): string {
 /* Rendu par type                                                             */
 /* -------------------------------------------------------------------------- */
 
-function renderContainer(node: AnyBlockNode, depth: number, today: Date): string {
+function renderContainer(
+  node: AnyBlockNode,
+  depth: number,
+  today: Date,
+  formEndpoint: string | null,
+): string {
   const content = node.content as ContainerContent;
   const tag = content.tag ?? 'div';
   const anchor = content.anchor ? ` id="${escapeAttr(content.anchor)}"` : ` id="${escapeAttr(node.id)}"`;
-  const inner = node.children.map((child) => renderNodeToHtml(child, depth + 1, today)).join('');
+  const inner = node.children
+    .map((child) => renderNodeToHtml(child, depth + 1, today, formEndpoint))
+    .join('');
   return `<${tag}${anchor} data-crea-id="${escapeAttr(node.id)}"${styleAttr(node)}${attributesFromActions(node.actions)}>${inner}</${tag}>`;
 }
 
@@ -179,7 +186,16 @@ function renderCalendar(node: AnyBlockNode, today: Date): string {
   );
 }
 
-function renderForm(node: AnyBlockNode, depth: number, today: Date): string {
+/** Champ cache : un humain ne le voit pas, un robot le remplit. */
+const HONEYPOT_FIELD = '_crea_hp';
+const FORM_ID_FIELD = '_crea_form';
+
+function renderForm(
+  node: AnyBlockNode,
+  depth: number,
+  today: Date,
+  formEndpoint: string | null,
+): string {
   const content = node.content as FormContent;
   const fields = (content.fields ?? [])
     .map((field) => {
@@ -203,22 +219,42 @@ function renderForm(node: AnyBlockNode, depth: number, today: Date): string {
     })
     .join('');
 
-  const children = node.children.map((child) => renderNodeToHtml(child, depth + 1, today)).join('');
+  const children = node.children
+    .map((child) => renderNodeToHtml(child, depth + 1, today, formEndpoint))
+    .join('');
   const submit = `<button type="submit" class="crea-submit">${escapeHtml(content.submitLabel ?? 'Envoyer')}</button>`;
 
+  // Un `endpoint` saisi a la main l emporte — il peut viser un service tiers.
+  // Sinon on vise la reception integree, quand l appelant en fournit l adresse.
+  const authored = (content.endpoint ?? '').trim();
+  const action = authored && authored !== '#' ? safeUrl(authored) : (formEndpoint ?? '#');
+  const method = authored ? (content.method ?? 'POST') : 'POST';
+
+  // `aria-hidden` et `tabindex` gardent le piege hors de portee des lecteurs
+  // d ecran et du parcours au clavier : seul un robot le remplira.
+  const honeypot =
+    `<input type="text" name="${HONEYPOT_FIELD}" value="" tabindex="-1" autocomplete="off" ` +
+    `aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0" />`;
+  const marker = `<input type="hidden" name="${FORM_ID_FIELD}" value="${escapeAttr(node.id)}" />`;
+
   return (
-    `<form data-crea-id="${escapeAttr(node.id)}" class="crea-form" method="${escapeAttr(content.method ?? 'POST')}" ` +
-    `action="${escapeAttr(safeUrl(content.endpoint ?? '#'))}" data-success="${escapeAttr(content.successMessage ?? '')}"${styleAttr(node)}>` +
-    `${fields}${children}${submit}</form>`
+    `<form data-crea-id="${escapeAttr(node.id)}" class="crea-form" method="${escapeAttr(method)}" ` +
+    `action="${escapeAttr(action)}" data-success="${escapeAttr(content.successMessage ?? '')}"${styleAttr(node)}>` +
+    `${marker}${honeypot}${fields}${children}${submit}</form>`
   );
 }
 
 /** Rendu d un noeud et de sa descendance. */
-export function renderNodeToHtml(node: AnyBlockNode, depth = 0, today = new Date()): string {
+export function renderNodeToHtml(
+  node: AnyBlockNode,
+  depth = 0,
+  today = new Date(),
+  formEndpoint: string | null = null,
+): string {
   if (depth > 64) return '';
   switch (node.type) {
     case 'container':
-      return renderContainer(node, depth, today);
+      return renderContainer(node, depth, today, formEndpoint);
     case 'text':
       return renderText(node);
     case 'media':
@@ -228,7 +264,7 @@ export function renderNodeToHtml(node: AnyBlockNode, depth = 0, today = new Date
     case 'calendar':
       return renderCalendar(node, today);
     case 'form':
-      return renderForm(node, depth, today);
+      return renderForm(node, depth, today, formEndpoint);
     default:
       return '';
   }
@@ -284,12 +320,20 @@ export interface RenderOptions {
   includeRuntime?: boolean;
   /** Date de reference pour les calendriers (tests deterministes). */
   today?: Date;
+  /**
+   * Adresse recevant les formulaires qui n en declarent pas.
+   *
+   * Elle depend du site servi — `/p/<adresse>/contact` — donc de l appelant :
+   * le rendu ne peut pas la deviner, et sans elle un formulaire ne mene nulle
+   * part. C est le seul endroit ou cette dependance entre.
+   */
+  formEndpoint?: string | null;
 }
 
 /** Projection complete : document HTML autonome. */
 export function renderTreeToHtml(tree: PageTree, options: RenderOptions = {}): string {
-  const { includeRuntime = true, today = new Date() } = options;
-  const body = renderNodeToHtml(tree.root, 0, today);
+  const { includeRuntime = true, today = new Date(), formEndpoint = null } = options;
+  const body = renderNodeToHtml(tree.root, 0, today, formEndpoint);
   const themeVariables = Object.entries(tree.theme.colors)
     .map(([name, value]) => `--crea-${name}:${value}`)
     .join(';');

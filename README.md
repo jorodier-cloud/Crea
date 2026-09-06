@@ -112,7 +112,7 @@ Sans cles S3, l'upload bascule automatiquement sur `/api/media/upload`
 ## Base de donnees (D1)
 
 Migrations : `apps/api/migrations/` — `0001_init.sql` (schema initial),
-`0002_publish.sql` (publication).
+`0002_publish.sql` (publication), `0003_messages.sql` (demandes de contact).
 
 ### `Users`
 
@@ -473,6 +473,34 @@ compile le builder apres avoir deploye l API, avec l URL reelle de celle-ci.
 Pour servir le builder ailleurs (domaine personnalise), definir la variable
 `CREA_SITE_URL` : elle prime sur l URL `workers.dev` et devient l origine
 autorisee par le CORS.
+
+### Formulaires de contact
+
+Un bloc `form` qui ne declare pas d `endpoint` vise `/p/<adresse>/contact`. La
+demande est **ecrite en base avant d etre envoyee** : un email en retard ne
+coute rien, une demande de reservation perdue coute une nuitee.
+
+| Protection | Regle |
+| --- | --- |
+| Champ piege | `_crea_hp`, invisible et hors du parcours clavier — rempli, la demande est ignoree en repondant `200` |
+| Limite | 5 demandes par heure et par adresse IP, comptees sur `Messages` |
+| Champs retenus | uniquement ceux que le formulaire publie declare |
+| Taille | 64 Ko par requete, 4 000 caracteres par champ |
+
+L adresse IP n est jamais stockee : seule une empreinte salee par
+`SESSION_SECRET` l est, suffisante pour compter, inutilisable pour identifier.
+
+L email part vers le proprietaire du projet, avec l adresse du visiteur en
+`reply-to` quand le formulaire comporte un champ `email` valide. Renseigner un
+`endpoint` a la main reste possible pour viser un service tiers.
+
+Les demandes s accumulent dans la table `Messages`. Aucun ecran ne les affiche
+encore dans le builder — elles se lisent pour l instant en base :
+
+```bash
+npx wrangler d1 execute crea --remote --command \
+  "SELECT created_at, sender_name, sender_email, payload FROM Messages ORDER BY created_at DESC LIMIT 20"
+```
 
 ### Envoi des emails
 
