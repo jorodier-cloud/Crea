@@ -1,0 +1,23 @@
+---
+import Base from '../layouts/Base.astro';
+---
+
+<Base title="Page introuvable — Crea">
+  <main class="mx-auto flex min-h-screen max-w-2xl flex-col justify-center px-6 py-20">
+    <p class="mb-3 text-[12px] font-semibold tracking-[0.14em] text-muted uppercase">Erreur 404</p>
+
+    <h1 class="font-display text-4xl leading-tight text-forest sm:text-5xl">
+      Cette page n existe pas.
+    </h1>
+
+    <p class="mt-6 text-[17px] leading-relaxed text-muted">
+      L adresse demandee ne correspond a aucune page du builder. Un site publie se consulte, lui,
+      sur l API : <span class="font-mono text-[15px] text-ink">/p/&lt;adresse&gt;</span>.
+    </p>
+
+    <div class="mt-8 flex flex-wrap gap-3">
+      <a href="/" class="crea-btn crea-btn-primary">Retour a l accueil</a>
+      <a href="/projects" class="crea-btn crea-btn-ghost">Mes projets</a>
+    </div>
+  </main>
+</Base>

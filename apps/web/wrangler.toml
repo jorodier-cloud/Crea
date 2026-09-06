@@ -1,0 +1,21 @@
+# Le builder est un site entierement statique : Astro genere `dist/`, et ce
+# Worker ne fait que le servir. Aucun `main` n est declare — il n y a pas de
+# code serveur ici, l API vit dans `apps/api`.
+#
+# Pourquoi un Worker plutot que Cloudflare Pages : le jeton API qui deploie
+# deja `crea-api` suffit tel quel. Pages exigerait une permission
+# supplementaire, donc un passage par le tableau de bord Cloudflare — c est
+# precisement ce que le deploiement automatise cherche a eviter.
+name = "crea-web"
+compatibility_date = "2026-01-15"
+workers_dev = true
+
+[assets]
+directory = "./dist"
+# Astro ecrit une page par route (`builder/index.html`) : le mode automatique
+# resout `/builder` vers ce fichier sans redirection visible.
+html_handling = "auto-trailing-slash"
+not_found_handling = "404-page"
+
+[observability]
+enabled = true

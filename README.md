@@ -419,9 +419,15 @@ journaux.
 **A chaque deploiement, le workflow :** verifie les types, execute les tests,
 cree les ressources Cloudflare manquantes (base D1, bucket R2, sous-domaine
 `workers.dev`), prepare `wrangler.toml` (identifiant de base, production, compte R2), pose les
-secrets du Worker, applique les migrations distantes, deploie, recale les URL et
-redeploie si besoin. `SESSION_SECRET` n est genere que s il manque — le
+secrets du Worker, applique les migrations distantes, deploie l API, **compile et
+deploie le builder** avec l URL reelle de celle-ci, puis recale les URL et
+redeploie l API si besoin. `SESSION_SECRET` n est genere que s il manque — le
 regenerer deconnecterait tous les comptes.
+
+La cle Anthropic est acceptee sous `CREA_ANTHROPIC_API_KEY` ou
+`ANTHROPIC_API_KEY` : le nom exact du secret ne decide pas si le moteur IA
+fonctionne. Si le builder ne peut pas etre deploye, le workflow previent sans
+echouer — l API reste en ligne.
 
 `wrangler.toml` est modifie dans le poste de travail du workflow uniquement,
 jamais recommite : chaque execution repart du depot.
@@ -446,13 +452,24 @@ Worker (`/api/media/upload`) au lieu d une URL presignee.
 
 ### Builder
 
+Le builder est un site entierement statique, servi par un second Worker
+(`crea-web`, configure dans `apps/web/wrangler.toml`) plutot que par Cloudflare
+Pages : le jeton API qui deploie deja `crea-api` suffit tel quel, la ou Pages
+demanderait une permission supplementaire.
+
 ```bash
-npm run build --workspace @crea/web    # -> apps/web/dist sur Cloudflare Pages
+PUBLIC_API_URL=https://crea-api.<compte>.workers.dev \
+  npm run build --workspace @crea/web
+npx wrangler deploy --cwd apps/web
 ```
 
-Definir `PUBLIC_API_URL` sur l URL du Worker dans les variables de Pages, puis
-relancer `npm run setup:cloudflare --site-url=<url de Pages>` pour autoriser
-cette origine dans le CORS.
+`PUBLIC_API_URL` est fige a la compilation par Astro : changer d API impose de
+rebatir le site, pas seulement de le redeployer. Le workflow s en charge — il
+compile le builder apres avoir deploye l API, avec l URL reelle de celle-ci.
+
+Pour servir le builder ailleurs (domaine personnalise), definir la variable
+`CREA_SITE_URL` : elle prime sur l URL `workers.dev` et devient l origine
+autorisee par le CORS.
 
 ### Reste a faire a la main
 

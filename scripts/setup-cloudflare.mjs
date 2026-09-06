@@ -363,11 +363,13 @@ async function main() {
 
   console.log(`\n${color.bold('Termine.')}`);
   console.log('\nIl reste a faire, une seule fois :');
-  console.log(`  1. commiter apps/api/wrangler.toml`);
-  console.log(`  2. deployer le builder : npm run build --workspace @crea/web`);
-  console.log(`     puis publier apps/web/dist sur Cloudflare Pages`);
-  console.log(`  3. definir PUBLIC_API_URL=${workerUrl ?? '<url du worker>'} dans les variables de Pages`);
-  console.log(`  4. relancer ce script avec --site-url=<url de Pages> pour ouvrir le CORS`);
+  console.log('  1. commiter apps/api/wrangler.toml');
+  console.log('  2. deployer le builder :');
+  console.log(
+    `       PUBLIC_API_URL=${workerUrl ?? '<url du worker>'} npm run build --workspace @crea/web`,
+  );
+  console.log('       npx wrangler deploy --cwd apps/web');
+  console.log('  3. relancer ce script avec --site-url=<url du builder> pour ouvrir le CORS');
   console.log('');
 }
 

@@ -14,7 +14,8 @@
  *   CREA_D1_DATABASE_ID     optionnel — sinon la base est creee au besoin
  *   CREA_ANTHROPIC_API_KEY  optionnel — sans elle le moteur IA renvoie 503
  *                           (ANTHROPIC_API_KEY est accepte comme repli)
- *   CREA_SITE_URL           optionnel — domaine du builder, pour le CORS
+ *   CREA_SITE_URL           optionnel — domaine du builder s il est servi
+ *                           ailleurs que sur son URL workers.dev par defaut
  *   CREA_WORKERS_SUBDOMAIN  optionnel — nom workers.dev du compte (defaut : crea)
  */
 
@@ -27,11 +28,12 @@ import {
   anthropicKeyMissing,
   describeKeySources,
   missingEnvVars,
-  resolveAnthropicKey,
   planSecrets,
   planUrlUpdates,
   readSubdomainCreation,
   readSubdomainState,
+  resolveAnthropicKey,
+  resolveSiteUrl,
   toValidSubdomain,
 } from './lib/deploy.mjs';
 import {
@@ -43,6 +45,7 @@ import {
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const API_DIR = join(ROOT, 'apps', 'api');
+const WEB_DIR = join(ROOT, 'apps', 'web');
 const CONFIG_PATH = join(API_DIR, 'wrangler.toml');
 const WRANGLER = join(ROOT, 'node_modules', '.bin', 'wrangler');
 
@@ -70,9 +73,9 @@ function fail(message, hint) {
  * message d erreur ne doit pas se retrouver dans les journaux publics par
  * inadvertance, on choisit donc explicitement ce qu on reaffiche.
  */
-function wrangler(args, { input, allowFailure = false } = {}) {
+function wrangler(args, { input, allowFailure = false, cwd = API_DIR } = {}) {
   const result = spawnSync(WRANGLER, args, {
-    cwd: API_DIR,
+    cwd,
     encoding: 'utf8',
     env: { ...process.env, CI: '1' },
     ...(input !== undefined ? { input } : {}),
@@ -87,6 +90,46 @@ function wrangler(args, { input, allowFailure = false } = {}) {
   }
 
   return { status: result.status, output };
+}
+
+/**
+ * Construit puis deploie le builder comme Worker de fichiers statiques.
+ *
+ * `PUBLIC_API_URL` est fige a la compilation par Astro : le site doit donc etre
+ * rebati une fois l URL de l API connue, pas avant. En cas d echec on previent
+ * sans interrompre — l API reste utilisable meme si l interface ne part pas.
+ */
+function deployWebApp(apiUrl) {
+  const built = spawnSync('npm', ['run', 'build', '--workspace', '@crea/web'], {
+    cwd: ROOT,
+    encoding: 'utf8',
+    env: { ...process.env, PUBLIC_API_URL: apiUrl, CI: '1' },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  if (built.status !== 0) {
+    console.error(`${built.stdout ?? ''}${built.stderr ?? ''}`);
+    warn('construction du builder impossible : seule l API a ete deployee.');
+    return null;
+  }
+  ok(`builder compile avec PUBLIC_API_URL=${apiUrl}`);
+
+  const deployed = wrangler(['deploy'], { cwd: WEB_DIR, allowFailure: true });
+  if (deployed.status !== 0) {
+    console.error(deployed.output);
+    warn('deploiement du builder impossible : seule l API est en ligne.');
+    return null;
+  }
+  console.log(deployed.output.trimEnd());
+
+  const url = extractWorkerUrl(deployed.output);
+  if (!url) {
+    warn('URL du builder illisible dans la sortie de wrangler.');
+    return null;
+  }
+
+  ok(`builder deploye : ${url}`);
+  return url;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -309,12 +352,17 @@ async function main() {
   }
   ok(`Worker deploye : ${workerUrl}`);
 
+  step('Site du builder');
+  const builderUrl = deployWebApp(workerUrl);
+
+  // Le CORS est recale en dernier : il doit autoriser l origine reelle du
+  // builder, qui n est connue qu une fois celui-ci deploye.
   step('Recalage des URL');
-  const updates = planUrlUpdates({
-    workerUrl,
-    siteUrl: process.env.CREA_SITE_URL?.trim() ?? '',
-    config,
+  const siteUrl = resolveSiteUrl({
+    configured: process.env.CREA_SITE_URL,
+    deployed: builderUrl,
   });
+  const updates = planUrlUpdates({ workerUrl, siteUrl, config });
 
   const keys = Object.keys(updates);
   if (keys.length === 0) {
@@ -331,13 +379,30 @@ async function main() {
   }
 
   step('Verification');
-  const summary = [`Worker : ${workerUrl}`, `Sites publies : ${workerUrl}/p/<adresse>`];
-  console.log(summary.join('\n'));
+  const lines = [
+    builderUrl ? `Builder : ${builderUrl}` : 'Builder : non deploye (voir avertissements)',
+    `API : ${workerUrl}`,
+    `Sites publies : ${workerUrl}/p/<adresse>`,
+  ];
+  console.log(lines.join('\n'));
 
   if (process.env.GITHUB_STEP_SUMMARY) {
+    // Le resume est souvent le seul ecran consulte depuis un telephone :
+    // l adresse du builder y passe en premier, c est celle qu on ouvre.
+    const builderLine = builderUrl
+      ? `- **Builder : ${builderUrl}**`
+      : '- Builder : **non deploye** — voir les avertissements du journal';
     writeFileSync(
       process.env.GITHUB_STEP_SUMMARY,
-      `## Deploiement reussi\n\n- API : ${workerUrl}\n- Sante : ${workerUrl}/api/health\n- Sites publies : \`${workerUrl}/p/<adresse>\`\n`,
+      [
+        '## Deploiement reussi',
+        '',
+        builderLine,
+        `- API : ${workerUrl}`,
+        `- Sante : ${workerUrl}/api/health`,
+        `- Sites publies : \`${workerUrl}/p/<adresse>\``,
+        '',
+      ].join('\n'),
       { flag: 'a' },
     );
   }

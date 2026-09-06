@@ -103,6 +103,21 @@ export function planUrlUpdates({ workerUrl, siteUrl, config }) {
 }
 
 /**
+ * Choisit l origine a autoriser dans le CORS.
+ *
+ * Un domaine fixe (`CREA_SITE_URL`) l emporte toujours : s il est defini, c est
+ * que le builder est servi ailleurs que sur son URL workers.dev par defaut.
+ * Sinon on prend celle du site qu on vient de deployer.
+ */
+export function resolveSiteUrl({ configured, deployed } = {}) {
+  const clean = (value) =>
+    String(value ?? '')
+      .trim()
+      .replace(/\/+$/, '');
+  return clean(configured) || clean(deployed) || '';
+}
+
+/**
  * Verifie qu une variable d environnement obligatoire est presente.
  * Retourne la liste des manquantes plutot que d echouer sur la premiere :
  * l utilisateur les ajoute toutes en une fois.
