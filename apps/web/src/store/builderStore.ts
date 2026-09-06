@@ -96,6 +96,8 @@ export interface BuilderState {
   renameBlock: (id: string, name: string) => void;
   removeBlock: (id: string) => void;
   duplicateBlock: (id: string) => void;
+  /** Deplace un bloc d un cran parmi ses freres. Sans glisser-deposer. */
+  nudgeBlock: (id: string, direction: -1 | 1) => void;
   dropOn: (target: DropTarget) => void;
 
   undo: () => void;
@@ -313,6 +315,26 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
 
   duplicateBlock(id) {
     get().runOperations([{ op: 'duplicate', id }]);
+  },
+
+  /**
+   * Monte ou descend un bloc d un cran parmi ses freres.
+   *
+   * Le glisser-deposer HTML5 n existe pas sur ecran tactile : sans cette
+   * action, reorganiser une page depuis un telephone serait impossible.
+   */
+  nudgeBlock(id, direction) {
+    const { tree } = get();
+    const location = findLocation(tree.root, id);
+    if (!location?.parent) return;
+
+    const index = location.index + direction;
+    if (index < 0 || index >= location.parent.children.length) return;
+
+    const errors = get().runOperations([
+      { op: 'move', id, parentId: location.parent.id, index },
+    ]);
+    if (errors.length === 0) set({ selectedId: id });
   },
 
   dropOn(target) {

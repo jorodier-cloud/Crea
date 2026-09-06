@@ -21,7 +21,7 @@ export function Canvas(): React.ReactElement {
 
   return (
     <div
-      className="crea-canvas-frame flex-1 overflow-auto bg-[#EDE9DF] p-6"
+      className="crea-canvas-frame min-w-0 flex-1 overflow-auto bg-[#EDE9DF] p-3 lg:p-6"
       onClick={() => select(null)}
       onDragOver={(event) => {
         if (!drag) return;

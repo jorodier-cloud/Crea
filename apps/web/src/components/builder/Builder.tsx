@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 import { requireSession } from '../../lib/session.js';
 import { useBuilderStore } from '../../store/builderStore.js';
@@ -8,6 +8,36 @@ import { RightInspector } from './RightInspector.js';
 import { TopBar } from './TopBar.js';
 
 const AUTOSAVE_DELAY_MS = 2500;
+
+/**
+ * Sous le seuil `lg`, les trois zones ne tiennent pas cote a cote : 340 + 320
+ * pixels de panneaux ne laissent rien au canvas sur un telephone. Une seule est
+ * alors visible, choisie par la barre du bas. Au-dessus du seuil, rien ne
+ * change — les trois colonnes restent affichees ensemble.
+ */
+type Pane = 'chat' | 'page' | 'reglages';
+
+const PANES: ReadonlyArray<{ value: Pane; label: string; icon: string }> = [
+  { value: 'chat', label: 'Chat IA', icon: '✦' },
+  { value: 'page', label: 'Page', icon: '▤' },
+  { value: 'reglages', label: 'Reglages', icon: '⚙' },
+];
+
+/**
+ * Classes d une zone. Sur mobile elle occupe tout l espace ou disparait ; sur
+ * grand ecran les trois sont visibles, et seul le canvas s etire.
+ *
+ * `grow` est un parametre plutot qu une classe ajoutee par l appelant :
+ * `lg:flex-1` et `lg:flex-none` ont la meme specificite, et la feuille de
+ * style — non l ordre d ecriture — trancherait entre les deux.
+ */
+function paneClasses(active: boolean, grow = false): string {
+  return [
+    active ? 'flex' : 'hidden',
+    'min-h-0 min-w-0 flex-1 lg:flex',
+    grow ? 'lg:flex-1' : 'lg:flex-none',
+  ].join(' ');
+}
 
 interface BuilderProps {
   projectId: string;
@@ -21,6 +51,10 @@ export function Builder({ projectId }: BuilderProps): React.ReactElement {
   const dismissError = useBuilderStore((state) => state.dismissError);
   const dirty = useBuilderStore((state) => state.dirty);
   const tree = useBuilderStore((state) => state.tree);
+  const selectedId = useBuilderStore((state) => state.selectedId);
+
+  // La page est la vue d entree : on ouvre sur ce qu on vient construire.
+  const [pane, setPane] = useState<Pane>('page');
 
   useEffect(() => {
     if (!requireSession()) return;
@@ -79,7 +113,9 @@ export function Builder({ projectId }: BuilderProps): React.ReactElement {
   }, []);
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden">
+    // `dvh` plutot que `vh` : sur mobile, la barre d adresse retractable fausse
+    // `100vh` et fait deborder la page sous l ecran.
+    <div className="flex h-dvh flex-col overflow-hidden">
       <TopBar />
 
       {error && (
@@ -92,16 +128,54 @@ export function Builder({ projectId }: BuilderProps): React.ReactElement {
       )}
 
       <div className="flex min-h-0 flex-1">
-        <LeftPanel />
-        {loading ? (
-          <div className="flex flex-1 items-center justify-center text-[13px] text-muted">
-            Chargement du projet…
-          </div>
-        ) : (
-          <Canvas />
-        )}
-        <RightInspector />
+        <div className={paneClasses(pane === 'chat')}>
+          <LeftPanel />
+        </div>
+
+        <div className={paneClasses(pane === 'page', true)}>
+          {loading ? (
+            <div className="flex flex-1 items-center justify-center text-[13px] text-muted">
+              Chargement du projet…
+            </div>
+          ) : (
+            <Canvas />
+          )}
+        </div>
+
+        <div className={paneClasses(pane === 'reglages')}>
+          <RightInspector />
+        </div>
       </div>
+
+      {/* Barre de navigation tactile. `pb-safe` degage la barre systeme iOS. */}
+      <nav className="crea-panel flex shrink-0 border-t pb-[env(safe-area-inset-bottom)] lg:hidden">
+        {PANES.map((item) => {
+          const active = pane === item.value;
+          return (
+            <button
+              key={item.value}
+              type="button"
+              onClick={() => setPane(item.value)}
+              aria-current={active ? 'page' : undefined}
+              className={`relative flex flex-1 flex-col items-center gap-0.5 py-2.5 text-[11px] font-semibold transition-colors ${
+                active ? 'text-forest' : 'text-muted'
+              }`}
+            >
+              <span aria-hidden="true" className="text-[15px] leading-none">
+                {item.icon}
+              </span>
+              {item.label}
+              {/* Un bloc selectionne a des reglages a voir : on le signale. */}
+              {item.value === 'reglages' && selectedId && !active && (
+                <span
+                  aria-hidden="true"
+                  className="absolute top-1.5 right-[28%] h-1.5 w-1.5 rounded-full bg-gold"
+                />
+              )}
+            </button>
+          );
+        })}
+      </nav>
     </div>
   );
 }
