@@ -68,17 +68,27 @@ authRoutes.post('/magic-link', async (c) => {
   try {
     await sendEmail(c.env, { to: user.email, ...message });
   } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    const status = error instanceof MailError ? error.status : undefined;
+
     // Le lien lui-meme ne doit jamais atterrir dans les journaux : quiconque y
     // a acces prendrait la main sur le compte.
     console.error(
       JSON.stringify({
         event: 'magic_link_send_failed',
         userId: user.id,
-        ...(error instanceof MailError ? { upstreamStatus: error.status } : {}),
-        reason: error instanceof Error ? error.message : String(error),
+        ...(status !== undefined ? { upstreamStatus: status } : {}),
+        reason,
       }),
     );
-    throw badGateway("L envoi de l email a echoue. Reessayez dans un instant.");
+
+    // Le motif remonte jusqu a la page de connexion. Il decrit notre propre
+    // configuration — cle refusee, expediteur non verifie — jamais une donnee
+    // d utilisateur, et le lire dans les journaux Cloudflare depuis un
+    // telephone est hors de portee : sans lui, la panne est indiagnosticable.
+    throw badGateway(`L envoi de l email a echoue : ${reason}`, {
+      ...(status !== undefined ? { statut: status } : {}),
+    });
   }
 
   console.log(JSON.stringify({ event: 'magic_link_sent', userId: user.id, expiresAt }));
