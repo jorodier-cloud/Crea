@@ -385,28 +385,30 @@ machine de developpement n est necessaire : tout se pilote depuis des pages web.
 
 **A faire une fois, au doigt :**
 
-1. **Cloudflare** — creer la base D1 `crea` et le bucket R2 `crea-media`,
-   puis relever l identifiant de la base.
-2. **Cloudflare > My Profile > API Tokens** — creer un jeton avec les droits
+1. **Cloudflare > My Profile > API Tokens** — creer un jeton avec les droits
    d edition sur Workers, D1 et R2.
-3. **GitHub > Settings > Secrets and variables > Actions** — ajouter :
+2. **GitHub > Settings > Secrets and variables > Actions** — ajouter :
 
 | Secret | Contenu |
 | --- | --- |
-| `CLOUDFLARE_API_TOKEN` | le jeton cree a l etape 2 |
+| `CLOUDFLARE_API_TOKEN` | jeton avec les droits Workers, D1 et R2 |
 | `CLOUDFLARE_ACCOUNT_ID` | identifiant de compte Cloudflare |
-| `CREA_D1_DATABASE_ID` | identifiant de la base `crea` |
 | `CREA_ANTHROPIC_API_KEY` | cle du moteur IA — optionnelle |
+
+**La base D1 et le bucket R2 sont crees par le workflow s ils manquent** : rien
+a preparer dans le tableau de bord Cloudflare. `CREA_D1_DATABASE_ID` reste
+accepte comme raccourci si la base existe deja ailleurs.
 
 Une **variable** (et non un secret) `CREA_SITE_URL` peut porter le domaine du
 builder, pour l autoriser dans le CORS.
 
-Tant que les trois premiers secrets manquent, le workflow s arrete proprement et
-affiche ce tableau dans son resume : un depot neuf n affiche pas une croix rouge
-a chaque push.
+Tant que les deux premiers secrets manquent, le workflow s arrete proprement et
+affiche dans son resume **le nom de ceux qui manquent** : un depot neuf n affiche
+pas une croix rouge a chaque push, et le diagnostic ne demande pas de lire les
+journaux.
 
 **A chaque deploiement, le workflow :** verifie les types, execute les tests,
-prepare `wrangler.toml` (identifiant de base, production, compte R2), pose les
+cree les ressources Cloudflare manquantes, prepare `wrangler.toml` (identifiant de base, production, compte R2), pose les
 secrets du Worker, applique les migrations distantes, deploie, recale les URL et
 redeploie si besoin. `SESSION_SECRET` n est genere que s il manque — le
 regenerer deconnecterait tous les comptes.
