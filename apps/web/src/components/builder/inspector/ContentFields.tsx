@@ -11,7 +11,7 @@ import {
   type TextContent,
 } from '@crea/schema';
 
-import { NumberField, Section, SelectField, TextField } from './Fields.js';
+import { NumberField, Section, SelectField, TextField, type InspectorMode } from './Fields.js';
 import { MediaPicker } from './MediaPicker.js';
 
 const CONTAINER_TAGS = [
@@ -50,22 +50,25 @@ const FIELD_TYPES = [
 
 interface ContentFieldsProps {
   node: AnyBlockNode;
+  mode: InspectorMode;
   onChange: (patch: Record<string, unknown>) => void;
 }
 
 /** Edition du contenu, adaptee au type de bloc selectionne. */
-export function ContentFields({ node, onChange }: ContentFieldsProps): React.ReactElement {
+export function ContentFields({ node, mode, onChange }: ContentFieldsProps): React.ReactElement {
   switch (node.type) {
     case 'container': {
       const content = node.content as ContainerContent;
       return (
-        <Section title="Conteneur">
-          <SelectField
-            label="Balise HTML"
-            value={content.tag}
-            options={CONTAINER_TAGS}
-            onChange={(tag) => onChange({ tag })}
-          />
+        <Section title="Section">
+          {mode === 'avance' && (
+            <SelectField
+              label="Balise HTML"
+              value={content.tag}
+              options={CONTAINER_TAGS}
+              onChange={(tag) => onChange({ tag })}
+            />
+          )}
           <TextField
             label="Ancre (cible de defilement)"
             value={content.anchor ?? ''}
@@ -99,7 +102,7 @@ export function ContentFields({ node, onChange }: ContentFieldsProps): React.Rea
     case 'media': {
       const content = node.content as MediaContent;
       return (
-        <Section title="Media">
+        <Section title="Image ou video">
           <MediaPicker
             onSelect={(media) =>
               onChange({

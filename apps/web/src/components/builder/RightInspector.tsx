@@ -4,10 +4,21 @@ import { useState } from 'react';
 import { useBuilderStore, useSelectedNode } from '../../store/builderStore.js';
 import { ActionFields } from './inspector/ActionFields.js';
 import { ContentFields } from './inspector/ContentFields.js';
-import { Section, TextField } from './inspector/Fields.js';
+import { Section, TextField, type InspectorMode } from './inspector/Fields.js';
 import { StyleFields } from './inspector/StyleFields.js';
 
 type Tab = 'contenu' | 'style' | 'actions';
+
+const MODE_STORAGE_KEY = 'crea.inspectorMode';
+
+function readStoredMode(): InspectorMode {
+  try {
+    const stored = localStorage.getItem(MODE_STORAGE_KEY);
+    return stored === 'avance' ? 'avance' : 'simple';
+  } catch {
+    return 'simple';
+  }
+}
 
 /**
  * Zone droite : edition manuelle du bloc selectionne, sans passer par l IA.
@@ -25,6 +36,16 @@ export function RightInspector(): React.ReactElement {
   const rootId = useBuilderStore((state) => state.tree.root.id);
 
   const [tab, setTab] = useState<Tab>('contenu');
+  const [mode, setMode] = useState<InspectorMode>(readStoredMode);
+
+  const setModeAndPersist = (next: InspectorMode): void => {
+    setMode(next);
+    try {
+      localStorage.setItem(MODE_STORAGE_KEY, next);
+    } catch {
+      // Stockage indisponible (navigation privee) : le choix reste valable pour la session.
+    }
+  };
 
   if (!node) {
     return (
@@ -46,9 +67,22 @@ export function RightInspector(): React.ReactElement {
           <span className="rounded bg-linen px-2 py-0.5 text-[11px] font-semibold text-forest">
             {DEFAULT_BLOCK_LABEL[node.type]}
           </span>
-          <span className="truncate font-mono text-[11px] text-muted" title={node.id}>
-            {node.id}
-          </span>
+          {/* Simple cache le vocabulaire CSS ; avance montre tous les reglages.
+              Persiste : on ne redecide pas a chaque bloc selectionne. */}
+          <div className="flex overflow-hidden rounded-full border border-line text-[11px] font-semibold">
+            {(['simple', 'avance'] as InspectorMode[]).map((item) => (
+              <button
+                key={item}
+                type="button"
+                onClick={() => setModeAndPersist(item)}
+                className={`px-2.5 py-1 capitalize transition-colors ${
+                  mode === item ? 'bg-forest text-white' : 'bg-white text-muted hover:text-forest'
+                }`}
+              >
+                {item}
+              </button>
+            ))}
+          </div>
         </div>
       </header>
 
@@ -77,12 +111,16 @@ export function RightInspector(): React.ReactElement {
                 onChange={(name) => renameBlock(node.id, name)}
               />
             </Section>
-            <ContentFields node={node} onChange={(patch) => updateContent(node.id, patch)} />
+            <ContentFields
+              node={node}
+              mode={mode}
+              onChange={(patch) => updateContent(node.id, patch)}
+            />
           </>
         )}
 
         {tab === 'style' && (
-          <StyleFields node={node} onChange={(patch) => updateStyles(node.id, patch)} />
+          <StyleFields node={node} mode={mode} onChange={(patch) => updateStyles(node.id, patch)} />
         )}
 
         {tab === 'actions' && (

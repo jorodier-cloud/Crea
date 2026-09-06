@@ -158,7 +158,7 @@ export function CanvasNode({ node, isRoot = false }: CanvasNodeProps): ReactNode
               width: '100%',
             }}
           >
-            Conteneur vide — deposez un bloc ici
+            Section vide — deposez un bloc ici
           </span>
         ),
       );
@@ -202,7 +202,7 @@ export function CanvasNode({ node, isRoot = false }: CanvasNodeProps): ReactNode
               border: `1px dashed ${SAGE}`,
             }}
           >
-            Media vide — choisir un fichier dans l inspecteur
+            Image vide — choisir un fichier dans l inspecteur
           </div>
         );
       }

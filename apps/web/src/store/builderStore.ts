@@ -20,6 +20,14 @@ import { api, ApiClientError } from '../lib/api.js';
 
 const HISTORY_LIMIT = 60;
 
+/**
+ * En dessous du seuil `lg`, une seule zone est visible a la fois (barre du
+ * bas). Vit dans le store, pas dans un `useState` de `Builder`, pour qu une
+ * action lancee depuis n importe quel panneau (ex. ajouter un bloc depuis la
+ * palette) puisse faire basculer la vue sur le resultat.
+ */
+export type Pane = 'chat' | 'page' | 'reglages';
+
 export type DropPosition = 'before' | 'after' | 'inside';
 
 export interface DragState {
@@ -62,6 +70,7 @@ export interface BuilderState {
   drag: DragState | null;
   dropTarget: DropTarget | null;
   viewport: 'desktop' | 'tablet' | 'mobile';
+  activePane: Pane;
 
   // Historique
   past: PageTree[];
@@ -92,6 +101,7 @@ export interface BuilderState {
   select: (id: string | null) => void;
   hover: (id: string | null) => void;
   setViewport: (viewport: BuilderState['viewport']) => void;
+  setPane: (pane: Pane) => void;
   beginDrag: (drag: DragState | null) => void;
   setDropTarget: (target: DropTarget | null) => void;
 
@@ -162,6 +172,7 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
   drag: null,
   dropTarget: null,
   viewport: 'desktop',
+  activePane: 'page',
 
   past: [],
   future: [],
@@ -237,6 +248,10 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
     set({ hoveredId: id });
   },
 
+  setPane(pane) {
+    set({ activePane: pane });
+  },
+
   setViewport(viewport) {
     set({ viewport });
   },
@@ -296,7 +311,15 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
     const errors = get().runOperations([
       { op: 'insert', parentId, ...(index !== undefined ? { index } : {}), node },
     ]);
-    if (errors.length === 0) set({ selectedId: node.id });
+    // Sur telephone, la palette et la page ne sont jamais visibles ensemble :
+    // sans ce basculement, toucher un bloc ne montre aucun resultat et rien
+    // ne distingue "ajoute mais invisible" de "n a rien fait".
+    if (errors.length === 0) {
+      set({ selectedId: node.id, activePane: 'page', highlightedIds: [node.id] });
+      setTimeout(() => {
+        set((state) => (state.highlightedIds.includes(node.id) ? { highlightedIds: [] } : {}));
+      }, 1600);
+    }
   },
 
   updateContent(id, patch) {

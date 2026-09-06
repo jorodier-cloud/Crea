@@ -3,6 +3,9 @@ import type { ReactNode } from 'react';
 
 /** Primitives de formulaire de l inspecteur. */
 
+/** Simple : l essentiel en langage courant. Avance : tous les reglages, vocabulaire CSS. */
+export type InspectorMode = 'simple' | 'avance';
+
 export function Section({
   title,
   children,
