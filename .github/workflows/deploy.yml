@@ -30,30 +30,48 @@ jobs:
       # Tant que les secrets Cloudflare ne sont pas renseignes, le workflow
       # s arrete proprement : un depot neuf ne doit pas afficher une croix rouge
       # a chaque push.
+      # Deux secrets suffisent : la base D1 et le bucket R2 sont crees par le
+      # script s ils manquent. Le resume nomme precisement ce qui bloque —
+      # diagnostiquer depuis un telephone ne doit pas demander de lire les logs.
       - name: Verifier que Cloudflare est configure
         id: gate
         env:
           TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          DATABASE: ${{ secrets.CREA_D1_DATABASE_ID }}
+          ANTHROPIC: ${{ secrets.CREA_ANTHROPIC_API_KEY }}
         run: |
-          if [ -z "$TOKEN" ] || [ -z "$ACCOUNT" ] || [ -z "$DATABASE" ]; then
+          # `if` explicites plutot que `[ ... ] && ...` : sous `set -e`, une telle
+          # ligne placee en fin de bloc ferait echouer l etape quand la condition
+          # est fausse. Ici, rien ne depend de l ordre des lignes.
+          absents=""
+          if [ -z "$TOKEN" ]; then absents="$absents CLOUDFLARE_API_TOKEN"; fi
+          if [ -z "$ACCOUNT" ]; then absents="$absents CLOUDFLARE_ACCOUNT_ID"; fi
+
+          absents="${absents# }"
+
+          if [ -n "$absents" ]; then
             echo "configured=false" >> "$GITHUB_OUTPUT"
             {
               echo "## Deploiement ignore"
               echo ""
-              echo "Secrets manquants. A ajouter dans **Settings > Secrets and variables > Actions** :"
+              echo "Secret(s) manquant(s) : **$absents**"
+              echo ""
+              echo "A ajouter dans **Settings > Secrets and variables > Actions**, onglet *Secrets* :"
               echo ""
               echo "| Secret | Ou le trouver |"
               echo "| --- | --- |"
-              echo "| \`CLOUDFLARE_API_TOKEN\` | Cloudflare > My Profile > API Tokens |"
+              echo "| \`CLOUDFLARE_API_TOKEN\` | Cloudflare > My Profile > API Tokens (droits Workers, D1 et R2) |"
               echo "| \`CLOUDFLARE_ACCOUNT_ID\` | Cloudflare > Workers > barre laterale |"
-              echo "| \`CREA_D1_DATABASE_ID\` | Cloudflare > Storage & Databases > D1 > crea |"
               echo "| \`CREA_ANTHROPIC_API_KEY\` | console.anthropic.com — optionnel |"
+              echo ""
+              echo "La base D1 et le bucket R2 sont crees automatiquement : rien a preparer dans Cloudflare."
             } >> "$GITHUB_STEP_SUMMARY"
-            echo "::notice::Secrets Cloudflare absents — deploiement ignore, voir le resume."
+            echo "::notice::Secrets absents : $absents — deploiement ignore, voir le resume."
           else
             echo "configured=true" >> "$GITHUB_OUTPUT"
+            if [ -z "$ANTHROPIC" ]; then
+              echo "::warning::CREA_ANTHROPIC_API_KEY absente — le moteur IA repondra 503."
+            fi
           fi
 
       - name: Installer les dependances

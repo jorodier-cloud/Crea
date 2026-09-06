@@ -2,15 +2,16 @@
 /**
  * Deploiement depuis GitHub Actions — aucun terminal requis.
  *
- * Contrairement a `setup-cloudflare.mjs`, ce script ne cree aucune ressource et
- * ne pose aucune question : la base D1 et le bucket R2 doivent exister, et tout
- * arrive par variables d environnement. Il s authentifie par jeton d API, pas
- * par session de navigateur.
+ * Contrairement a `setup-cloudflare.mjs`, ce script ne pose aucune question :
+ * tout arrive par variables d environnement, et il s authentifie par jeton d API
+ * plutot que par session de navigateur. La base D1 et le bucket R2 sont crees
+ * s ils manquent, pour qu aucun passage prealable par le tableau de bord
+ * Cloudflare ne soit necessaire.
  *
  * Variables attendues (secrets du depot GitHub) :
  *   CLOUDFLARE_API_TOKEN    lu directement par wrangler
  *   CLOUDFLARE_ACCOUNT_ID   lu directement par wrangler
- *   CREA_D1_DATABASE_ID     identifiant de la base "crea"
+ *   CREA_D1_DATABASE_ID     optionnel — sinon la base est creee au besoin
  *   CREA_ANTHROPIC_API_KEY  optionnel — sans elle le moteur IA renvoie 503
  *   CREA_SITE_URL           optionnel — domaine du builder, pour le CORS
  */
@@ -26,14 +27,21 @@ import {
   planSecrets,
   planUrlUpdates,
 } from './lib/deploy.mjs';
-import { extractWorkerUrl, getTomlValue, setTomlValue } from './lib/wrangler-config.mjs';
+import {
+  extractWorkerUrl,
+  findDatabaseId,
+  getTomlValue,
+  setTomlValue,
+} from './lib/wrangler-config.mjs';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const API_DIR = join(ROOT, 'apps', 'api');
 const CONFIG_PATH = join(API_DIR, 'wrangler.toml');
 const WRANGLER = join(ROOT, 'node_modules', '.bin', 'wrangler');
 
-const REQUIRED = ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID', 'CREA_D1_DATABASE_ID'];
+const REQUIRED = ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID'];
+const DATABASE_NAME = 'crea';
+const BUCKET_NAME = 'crea-media';
 
 let stepNumber = 0;
 const step = (label) => {
@@ -83,6 +91,65 @@ function patch(key, value) {
   return true;
 }
 
+/**
+ * Retourne l identifiant de la base D1, en la creant au besoin.
+ *
+ * `CREA_D1_DATABASE_ID` n est qu un raccourci facultatif : avec un jeton
+ * disposant des droits D1, le workflow se debrouille seul. C est ce qui evite
+ * d avoir a passer par le tableau de bord Cloudflare avant le premier
+ * deploiement.
+ */
+function resolveDatabaseId() {
+  const provided = process.env.CREA_D1_DATABASE_ID?.trim();
+  if (provided) {
+    ok(`base D1 fournie par secret (${provided})`);
+    return provided;
+  }
+
+  const listed = wrangler(['d1', 'list', '--json'], { allowFailure: true });
+  let id = findDatabaseId(listed.output, DATABASE_NAME);
+
+  if (id) {
+    ok(`base D1 "${DATABASE_NAME}" deja presente (${id})`);
+    return id;
+  }
+
+  const created = wrangler(['d1', 'create', DATABASE_NAME], { allowFailure: true });
+  if (created.status !== 0) {
+    console.error(created.output);
+    fail(
+      `creation de la base "${DATABASE_NAME}" impossible.`,
+      'Le jeton API doit porter le droit d edition D1 (Account > D1 > Edit).',
+    );
+  }
+
+  id = findDatabaseId(wrangler(['d1', 'list', '--json']).output, DATABASE_NAME);
+  if (!id) fail(`base "${DATABASE_NAME}" creee mais introuvable dans la liste.`);
+
+  ok(`base D1 "${DATABASE_NAME}" creee (${id})`);
+  return id;
+}
+
+/** Cree le bucket R2 s il manque. Un bucket deja present n est pas une erreur. */
+function ensureBucket() {
+  const created = wrangler(['r2', 'bucket', 'create', BUCKET_NAME], { allowFailure: true });
+
+  if (created.status === 0) {
+    ok(`bucket R2 "${BUCKET_NAME}" cree`);
+    return;
+  }
+  if (/already (exists|owned)|10004/i.test(created.output)) {
+    ok(`bucket R2 "${BUCKET_NAME}" deja present`);
+    return;
+  }
+
+  console.error(created.output);
+  fail(
+    `creation du bucket "${BUCKET_NAME}" impossible.`,
+    'Le jeton API doit porter le droit d edition R2 (Account > R2 > Edit).',
+  );
+}
+
 function main() {
   console.log('Deploiement Crea vers Cloudflare Workers');
 
@@ -97,9 +164,13 @@ function main() {
   if (!existsSync(WRANGLER)) fail('wrangler absent : `npm ci` a-t-il ete lance ?');
   ok(`${REQUIRED.length} variables presentes`);
 
+  step('Ressources Cloudflare');
+  const databaseId = resolveDatabaseId();
+  ensureBucket();
+
   step('Configuration');
   config = readFileSync(CONFIG_PATH, 'utf8');
-  patch('database_id', process.env.CREA_D1_DATABASE_ID.trim());
+  patch('database_id', databaseId);
   patch('ENVIRONMENT', 'production');
   patch('R2_ACCOUNT_ID', process.env.CLOUDFLARE_ACCOUNT_ID.trim());
   writeFileSync(CONFIG_PATH, config, 'utf8');
@@ -125,7 +196,7 @@ function main() {
   }
 
   step('Migrations D1');
-  const migrated = wrangler(['d1', 'migrations', 'apply', 'crea', '--remote']);
+  const migrated = wrangler(['d1', 'migrations', 'apply', DATABASE_NAME, '--remote']);
   console.log(migrated.output.trimEnd());
   ok('schema distant a jour');
 
