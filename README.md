@@ -95,7 +95,7 @@ magic link s'affiche directement dans la page.
 | `apps/api/wrangler.toml` | `APP_ORIGINS` | Origines autorisees par le CORS |
 | | `R2_PUBLIC_BASE_URL` | Base publique des medias |
 | | `R2_ACCOUNT_ID`, `R2_BUCKET_NAME` | Cible des URL presignees |
-| | `ANTHROPIC_MODEL` | `claude-opus-5` par defaut |
+| | `ANTHROPIC_MODEL` | `claude-sonnet-5` par defaut — 60% moins cher qu Opus, suffisant pour une sortie JSON stricte |
 | | `SIGNUP_IA_POINTS` | Credit offert a l'inscription |
 | | `MAIL_FROM` | Expediteur des liens de connexion |
 | `apps/api/.dev.vars` | `SESSION_SECRET` | Cle HMAC des sessions |
