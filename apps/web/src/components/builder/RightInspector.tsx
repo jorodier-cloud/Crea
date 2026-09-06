@@ -1,4 +1,4 @@
-import { DEFAULT_BLOCK_LABEL } from '@crea/schema';
+import { DEFAULT_BLOCK_LABEL, findLocation } from '@crea/schema';
 import { useState } from 'react';
 
 import { useBuilderStore, useSelectedNode } from '../../store/builderStore.js';
@@ -33,7 +33,8 @@ export function RightInspector(): React.ReactElement {
   const removeBlock = useBuilderStore((state) => state.removeBlock);
   const duplicateBlock = useBuilderStore((state) => state.duplicateBlock);
   const nudgeBlock = useBuilderStore((state) => state.nudgeBlock);
-  const rootId = useBuilderStore((state) => state.tree.root.id);
+  const treeRoot = useBuilderStore((state) => state.tree.root);
+  const rootId = treeRoot.id;
 
   const [tab, setTab] = useState<Tab>('contenu');
   const [mode, setMode] = useState<InspectorMode>(readStoredMode);
@@ -132,23 +133,40 @@ export function RightInspector(): React.ReactElement {
         <footer className="space-y-2 border-t border-line p-3">
           {/* Le glisser-deposer HTML5 n existe pas au doigt : sans ces deux
               boutons, reorganiser une page depuis un telephone serait
-              impossible. Ils servent aussi au clavier. */}
-          <div className="flex gap-2">
-            <button
-              type="button"
-              className="crea-btn crea-btn-ghost flex-1"
-              onClick={() => nudgeBlock(node.id, -1)}
-            >
-              ↑ Monter
-            </button>
-            <button
-              type="button"
-              className="crea-btn crea-btn-ghost flex-1"
-              onClick={() => nudgeBlock(node.id, 1)}
-            >
-              ↓ Descendre
-            </button>
-          </div>
+              impossible. Ils servent aussi au clavier.
+              Le deplacement se voit sur le canvas, pas ici : sans le repere
+              de position et la desactivation aux bornes, rien ne prouve que
+              le clic a fait quoi que ce soit tant qu on reste sur cet onglet. */}
+          {(() => {
+            const location = findLocation(treeRoot, node.id);
+            const position = location ? location.index + 1 : 1;
+            const total = location?.parent?.children.length ?? 1;
+            return (
+              <>
+                <p className="text-center text-[11px] text-muted">
+                  Position {position} sur {total}
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    className="crea-btn crea-btn-ghost flex-1"
+                    disabled={position <= 1}
+                    onClick={() => nudgeBlock(node.id, -1)}
+                  >
+                    ↑ Monter
+                  </button>
+                  <button
+                    type="button"
+                    className="crea-btn crea-btn-ghost flex-1"
+                    disabled={position >= total}
+                    onClick={() => nudgeBlock(node.id, 1)}
+                  >
+                    ↓ Descendre
+                  </button>
+                </div>
+              </>
+            );
+          })()}
 
           <div className="flex gap-2">
           <button
