@@ -29,7 +29,11 @@ export function LeftPanel(): React.ReactElement {
   const submit = (text: string): void => {
     if (!text.trim() || aiPending || points <= 0) return;
     setDraft('');
-    void sendPrompt(text);
+    // En echec (connexion coupee, app en arriere-plan...), le texte revient
+    // dans le champ : sans ca, un envoi rate obligerait a tout retaper.
+    void sendPrompt(text).then((ok) => {
+      if (!ok) setDraft(text);
+    });
   };
 
   return (
