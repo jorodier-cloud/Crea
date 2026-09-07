@@ -1,10 +1,11 @@
 import {
+  createEmptySite,
   createId,
-  createStarterTree,
-  parseTree,
-  serializeTree,
+  parseSite,
+  serializeSite,
   SchemaError,
-  type PageTree,
+  type Site,
+  type SitePage,
 } from '@crea/schema';
 
 import type { Env } from '../env.js';
@@ -33,7 +34,7 @@ export interface ProjectSummary {
 }
 
 export interface Project extends ProjectSummary {
-  tree: PageTree;
+  pages: SitePage[];
 }
 
 const MAX_TREE_BYTES = 900_000; // marge sous la limite de taille d une ligne D1.
@@ -51,8 +52,8 @@ function toSummary(row: ProjectRow): ProjectSummary {
 
 export function toProject(row: ProjectRow): Project {
   try {
-    const { tree } = parseTree(row.json_tree);
-    return { ...toSummary(row), tree };
+    const { site } = parseSite(row.json_tree);
+    return { ...toSummary(row), pages: site.pages };
   } catch (error) {
     if (error instanceof SchemaError) {
       throw serverError(`Projet ${row.id} corrompu : ${error.message}`, error.issues);
@@ -94,12 +95,11 @@ export async function createProject(
   env: Env,
   userId: string,
   title: string,
-  tree?: PageTree,
+  pages?: SitePage[],
 ): Promise<Project> {
   const id = createId('prj');
-  const initialTree = tree ?? createStarterTree(title);
-  initialTree.meta.title = initialTree.meta.title || title;
-  const json = serializeTree(initialTree);
+  const site: Site = pages && pages.length > 0 ? { pages } : createEmptySite(title);
+  const json = serializeSite(site);
 
   await env.DB.prepare(
     'INSERT INTO Projects (id, user_id, title, json_tree) VALUES (?1, ?2, ?3, ?4)',
@@ -112,10 +112,10 @@ export async function createProject(
 
 export interface UpdateProjectInput {
   title?: string;
-  tree?: PageTree;
+  pages?: SitePage[];
 }
 
-/** Sauvegarde le titre et/ou l AST. L arbre est deja normalise par l appelant. */
+/** Sauvegarde le titre et/ou les pages. Chaque arbre est deja normalise par l appelant. */
 export async function updateProject(
   env: Env,
   userId: string,
@@ -136,10 +136,10 @@ export async function updateProject(
     assignments.push(`title = ?${values.length + 1}`);
     values.push(input.title);
   }
-  if (input.tree !== undefined) {
-    const json = serializeTree(input.tree);
+  if (input.pages !== undefined) {
+    const json = serializeSite({ pages: input.pages });
     if (json.length > MAX_TREE_BYTES) {
-      throw badRequest(`Arbre trop volumineux (${json.length} octets, max ${MAX_TREE_BYTES}).`);
+      throw badRequest(`Site trop volumineux (${json.length} octets, max ${MAX_TREE_BYTES}).`);
     }
     assignments.push(`json_tree = ?${values.length + 1}`);
     values.push(json);
@@ -247,7 +247,7 @@ export async function unpublishProject(env: Env, userId: string, id: string): Pr
 
 export interface PublishedSite {
   title: string;
-  tree: PageTree;
+  pages: SitePage[];
   publishedAt: number;
 }
 
@@ -268,8 +268,8 @@ export async function getPublishedBySlug(env: Env, slug: string): Promise<Publis
   if (!row) throw notFound('Aucun site publie a cette adresse.');
 
   try {
-    const { tree } = parseTree(row.published_tree);
-    return { title: row.title, tree, publishedAt: row.published_at };
+    const { site } = parseSite(row.published_tree);
+    return { title: row.title, pages: site.pages, publishedAt: row.published_at };
   } catch (error) {
     if (error instanceof SchemaError) {
       throw serverError(`Site publie illisible : ${error.message}`, error.issues);

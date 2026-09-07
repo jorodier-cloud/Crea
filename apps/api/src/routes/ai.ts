@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { applyOperations, normalizeTree, SchemaError, type PageTree } from '@crea/schema';
 
 import type { AppBindings } from '../env.js';
-import { badRequest, paymentRequired, readJson, requireString } from '../lib/http.js';
+import { badRequest, notFound, paymentRequired, readJson, requireString } from '../lib/http.js';
 import { requireAuth } from '../middleware/auth.js';
 import { generateOperations } from '../services/anthropic.js';
 import { computePoints, POINTS_PRICING } from '../services/points.js';
@@ -26,6 +26,7 @@ aiRoutes.get('/pricing', (c) => c.json({ pricing: POINTS_PRICING }));
 aiRoutes.post('/prompt', async (c) => {
   const body = await readJson<{
     projectId?: unknown;
+    pageId?: unknown;
     prompt?: unknown;
     tree?: unknown;
     selectedNodeId?: unknown;
@@ -43,8 +44,15 @@ aiRoutes.post('/prompt', async (c) => {
   const user = c.get('user');
   const project = await getProject(c.env, user.id, projectId);
 
+  // Sans pageId (anciens clients), on cible l accueil : c est ce qu il y avait
+  // avant l introduction des pages multiples.
+  const pageId =
+    typeof body.pageId === 'string' && body.pageId.length > 0 ? body.pageId : project.pages[0]!.id;
+  const pageIndex = project.pages.findIndex((page) => page.id === pageId);
+  if (pageIndex === -1) throw notFound('Page introuvable.');
+
   // L etat de travail du navigateur prime sur l etat sauvegarde, apres validation.
-  let tree: PageTree = project.tree;
+  let tree: PageTree = project.pages[pageIndex]!.tree;
   if (body.tree !== undefined) {
     try {
       tree = normalizeTree(body.tree).tree;
@@ -80,7 +88,10 @@ aiRoutes.post('/prompt', async (c) => {
   const normalized = normalizeTree(JSON.parse(JSON.stringify(result.tree)));
 
   if (save && result.applied.length > 0) {
-    await updateProject(c.env, user.id, projectId, { tree: normalized.tree });
+    const pages = project.pages.map((page, index) =>
+      index === pageIndex ? { ...page, tree: normalized.tree } : page,
+    );
+    await updateProject(c.env, user.id, projectId, { pages });
   }
 
   return c.json({

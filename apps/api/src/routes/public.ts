@@ -1,5 +1,12 @@
 import { Hono } from 'hono';
-import { applyCalendarSync, escapeHtml, renderTreeToHtml } from '@crea/schema';
+import {
+  applyCalendarSync,
+  escapeHtml,
+  findPageBySlug,
+  renderTreeToHtml,
+  type AnyBlockNode,
+  type SitePage,
+} from '@crea/schema';
 
 import type { AppBindings } from '../env.js';
 import {
@@ -21,7 +28,24 @@ import {
   newMessageId,
   storeMessage,
 } from '../services/messages.js';
-import { getPublishedBySlug } from '../services/projects.js';
+import { getPublishedBySlug, type PublishedSite } from '../services/projects.js';
+
+/** Chemin public d une page ('' = accueil, sert la racine du slug). */
+function pagePath(slug: string, pageSlug: string): string {
+  return pageSlug ? `/p/${slug}/${pageSlug}` : `/p/${slug}`;
+}
+
+/** Cherche un formulaire par id sur l ensemble des pages, dans leur ordre de stockage. */
+function findContactForm(
+  pages: SitePage[],
+  formId: string | undefined,
+): { node: AnyBlockNode; page: SitePage } | null {
+  for (const page of pages) {
+    const node = formId ? findFormNode(page.tree, formId) : findFirstFormNode(page.tree);
+    if (node) return { node, page };
+  }
+  return null;
+}
 
 /**
  * Sites publies — la seule surface accessible sans authentification.
@@ -67,11 +91,11 @@ async function readFormBody(request: Request): Promise<Record<string, string>> {
  * doit rester lisible meme si rien d autre ne charge.
  */
 function confirmationPage({
-  slug,
+  backHref,
   title,
   message,
 }: {
-  slug: string;
+  backHref: string;
   title: string;
   message: string | null;
 }): string {
@@ -100,34 +124,49 @@ font-family:Helvetica,Arial,sans-serif;font-size:.9375rem;font-weight:600;text-d
 <p class="kicker">Demande envoyee</p>
 <h1>Merci.</h1>
 <p class="lead">${escapeHtml(texte)}</p>
-<a href="/p/${escapeHtml(slug)}">Retour au site</a>
+<a href="${escapeHtml(backHref)}">Retour au site</a>
 </main>
 </body>
 </html>`;
 }
 
-publicRoutes.get('/:slug', async (c) => {
-  const slug = c.req.param('slug').toLowerCase();
-  if (!SLUG_PATTERN.test(slug)) throw badRequest('Adresse invalide.');
+/** Sert une page publiee ('' = accueil). Partage par les deux routes GET ci-dessous. */
+async function renderSitePage(
+  site: PublishedSite,
+  slug: string,
+  pageSlug: string,
+): Promise<Response> {
+  const page = findPageBySlug({ pages: site.pages }, pageSlug);
+  if (!page) throw notFound('Aucune page a cette adresse.');
 
-  const site = await getPublishedBySlug(c.env, slug);
   // Les reservations Airbnb/Booking bloquent des nuits sans passer par l
   // editeur : sans cette synchronisation, le calendrier publie resterait
   // celui du dernier "Publier", potentiellement perime de plusieurs jours.
-  const syncedBlockedDates = await fetchCalendarBlockedDates(site.tree);
-  const tree = applyCalendarSync(site.tree, syncedBlockedDates);
+  const syncedBlockedDates = await fetchCalendarBlockedDates(page.tree);
+  const tree = applyCalendarSync(page.tree, syncedBlockedDates);
   // Les formulaires qui ne declarent pas d adresse visent la reception
-  // integree, servie juste en dessous.
+  // integree, servie juste en dessous — commune a toutes les pages du site.
   const html = renderTreeToHtml(tree, { formEndpoint: `/p/${slug}/contact` });
 
-  return c.html(html, 200, {
-    // Court, pour qu une republication soit visible rapidement, avec
-    // revalidation en arriere-plan cote CDN.
-    'cache-control': 'public, max-age=60, stale-while-revalidate=600',
-    'x-content-type-options': 'nosniff',
-    'referrer-policy': 'strict-origin-when-cross-origin',
-    'last-modified': new Date(site.publishedAt * 1000).toUTCString(),
+  return new Response(html, {
+    status: 200,
+    headers: {
+      'content-type': 'text/html; charset=utf-8',
+      // Court, pour qu une republication soit visible rapidement, avec
+      // revalidation en arriere-plan cote CDN.
+      'cache-control': 'public, max-age=60, stale-while-revalidate=600',
+      'x-content-type-options': 'nosniff',
+      'referrer-policy': 'strict-origin-when-cross-origin',
+      'last-modified': new Date(site.publishedAt * 1000).toUTCString(),
+    },
   });
+}
+
+publicRoutes.get('/:slug', async (c) => {
+  const slug = c.req.param('slug').toLowerCase();
+  if (!SLUG_PATTERN.test(slug)) throw badRequest('Adresse invalide.');
+  const site = await getPublishedBySlug(c.env, slug);
+  return renderSitePage(site, slug, '');
 });
 
 /**
@@ -149,7 +188,7 @@ publicRoutes.post('/:slug/contact', async (c) => {
   // Champ invisible pour un humain : rempli, c est un robot. On repond comme
   // si tout allait bien — signaler le piege apprendrait a le contourner.
   if ((submitted[HONEYPOT_FIELD] ?? '').trim()) {
-    return c.html(confirmationPage({ slug, title: '', message: null }), 200);
+    return c.html(confirmationPage({ backHref: `/p/${slug}`, title: '', message: null }), 200);
   }
 
   const [target, site] = await Promise.all([
@@ -158,8 +197,9 @@ publicRoutes.post('/:slug/contact', async (c) => {
   ]);
 
   const formId = submitted[FORM_ID_FIELD];
-  const node = formId ? findFormNode(site.tree, formId) : findFirstFormNode(site.tree);
-  if (!node) throw notFound('Ce site ne comporte aucun formulaire.');
+  const found = findContactForm(site.pages, formId);
+  if (!found) throw notFound('Ce site ne comporte aucun formulaire.');
+  const { node } = found;
 
   const manquants = missingRequired(node, submitted);
   if (manquants.length > 0) {
@@ -208,7 +248,11 @@ publicRoutes.post('/:slug/contact', async (c) => {
 
   const content = node.content as { successMessage?: string };
   return c.html(
-    confirmationPage({ slug, title: site.title, message: content.successMessage ?? null }),
+    confirmationPage({
+      backHref: pagePath(slug, found.page.slug),
+      title: site.title,
+      message: content.successMessage ?? null,
+    }),
     200,
   );
 });
@@ -219,3 +263,16 @@ publicRoutes.get('/:slug/robots.txt', (c) =>
     'content-type': 'text/plain; charset=utf-8',
   }),
 );
+
+/**
+ * Pages du site autres que l accueil, ex. /p/domaine/tarifs.
+ * Enregistree apres `/robots.txt` : un segment statique doit toujours
+ * l emporter sur un parametre, quoi que fasse le routeur avec l ordre.
+ */
+publicRoutes.get('/:slug/:pageSlug', async (c) => {
+  const slug = c.req.param('slug').toLowerCase();
+  if (!SLUG_PATTERN.test(slug)) throw badRequest('Adresse invalide.');
+  const pageSlug = c.req.param('pageSlug').toLowerCase();
+  const site = await getPublishedBySlug(c.env, slug);
+  return renderSitePage(site, slug, pageSlug);
+});

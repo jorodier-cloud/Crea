@@ -36,6 +36,7 @@ export function TopBar(): React.ReactElement {
   const saveStatus = useBuilderStore((state) => state.saveStatus);
   const lastSavedAt = useBuilderStore((state) => state.lastSavedAt);
   const projectId = useBuilderStore((state) => state.projectId);
+  const currentPageId = useBuilderStore((state) => state.currentPageId);
 
   return (
     <header className="crea-panel flex h-14 shrink-0 items-center gap-2 border-b px-3 lg:gap-4 lg:px-4">
@@ -107,7 +108,7 @@ export function TopBar(): React.ReactElement {
 
       {projectId && (
         <a
-          href={`/preview?id=${projectId}`}
+          href={`/preview?id=${projectId}&page=${currentPageId}`}
           target="_blank"
           rel="noopener"
           className="crea-btn crea-btn-ghost hidden lg:inline-flex"

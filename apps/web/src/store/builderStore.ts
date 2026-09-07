@@ -1,17 +1,20 @@
 import {
   applyOperations,
   canHaveChildren,
+  createId,
   createNode,
   createStarterTree,
   diffChangedNodeIds,
   findLocation,
   findNode,
   nearestContainerId,
+  normalizePageSlug,
   type AnyBlockNode,
   type BlockAction,
   type BlockType,
   type DeepPartialStyles,
   type PageTree,
+  type SitePage,
   type TreeOperation,
 } from '@crea/schema';
 import { create } from 'zustand';
@@ -60,7 +63,16 @@ export interface BuilderState {
   // Donnees
   projectId: string | null;
   title: string;
+  /** Arbre de la page actuellement editee — les AUTRES pages vivent dans `pages`. */
   tree: PageTree;
+  /**
+   * Toutes les pages du site, y compris la page active : `tree` en est un
+   * miroir de travail, resynchronise dans `pages` a la sauvegarde et au
+   * changement de page (voir `save` et `switchPage`). Les autres actions ne
+   * touchent jamais `pages` directement.
+   */
+  pages: SitePage[];
+  currentPageId: string;
   loading: boolean;
   error: string | null;
 
@@ -98,6 +110,11 @@ export interface BuilderState {
   // Actions
   loadProject: (id: string) => Promise<void>;
   setTitle: (title: string) => void;
+  /** Bascule d edition sur une autre page du site, en sauvegardant la page quittee en memoire. */
+  switchPage: (pageId: string) => void;
+  addPage: (label: string) => void;
+  renamePage: (pageId: string, patch: { label?: string; slug?: string }) => void;
+  removePage: (pageId: string) => void;
   select: (id: string | null) => void;
   hover: (id: string | null) => void;
   setViewport: (viewport: BuilderState['viewport']) => void;
@@ -133,6 +150,26 @@ function messageId(): string {
   return `msg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
 }
 
+/** Conversation de depart, la meme au chargement du projet qu au changement de page. */
+function freshChat(): ChatMessage[] {
+  return [
+    {
+      id: messageId(),
+      role: 'system',
+      text: 'Decrivez ce que vous voulez construire ou modifier. Selectionnez un bloc pour cibler la demande.',
+      at: Date.now(),
+    },
+  ];
+}
+
+/** Adresse de page libre : reprend celle demandee, ou en derive une disponible. */
+function freePageSlug(candidate: string, taken: ReadonlySet<string>): string {
+  const base = normalizePageSlug(candidate);
+  if (base && !taken.has(base)) return base;
+  const suffix = createId('p').split('_')[1]!.slice(0, 4);
+  return `${base || 'page'}-${suffix}`;
+}
+
 /** Convertit une cible de depot en couple (parent, index) exploitable. */
 function resolveDrop(
   tree: PageTree,
@@ -164,6 +201,8 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
   projectId: null,
   title: 'Nouveau site',
   tree: createStarterTree('Nouveau site'),
+  pages: [],
+  currentPageId: '',
   loading: false,
   error: null,
 
@@ -199,10 +238,13 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
         api.getProject(id),
         api.me(),
       ]);
+      const homePage = project.pages[0]!;
       set({
         projectId: project.id,
         title: project.title,
-        tree: project.tree,
+        tree: homePage.tree,
+        pages: project.pages,
+        currentPageId: homePage.id,
         slug: project.slug,
         publishedAt: project.publishedAt,
         publicUrl,
@@ -215,14 +257,7 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
         lastSavedAt: project.updatedAt * 1000,
         selectedId: null,
         highlightedIds: [],
-        chat: [
-          {
-            id: messageId(),
-            role: 'system',
-            text: 'Decrivez ce que vous voulez construire ou modifier. Selectionnez un bloc pour cibler la demande.',
-            at: Date.now(),
-          },
-        ],
+        chat: freshChat(),
       });
     } catch (error) {
       set({
@@ -238,6 +273,112 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
       tree: { ...state.tree, meta: { ...state.tree.meta, title } },
       dirty: true,
     }));
+  },
+
+  /**
+   * Bascule sur une autre page. L historique (annuler/retablir), la selection
+   * et la conversation sont propres a chaque page : les garder d une page a
+   * l autre exposerait par ex. un "Revenir a avant" qui restaurerait l arbre
+   * d une AUTRE page dans `tree`.
+   */
+  switchPage(pageId) {
+    const { pages, currentPageId, tree } = get();
+    if (pageId === currentPageId) return;
+    const target = pages.find((page) => page.id === pageId);
+    if (!target) return;
+
+    set({
+      // La page quittee garde son etat exact : rien n est perdu en changeant
+      // d onglet sans avoir clique sur Enregistrer.
+      pages: pages.map((page) => (page.id === currentPageId ? { ...page, tree } : page)),
+      currentPageId: pageId,
+      tree: target.tree,
+      selectedId: null,
+      hoveredId: null,
+      past: [],
+      future: [],
+      highlightedIds: [],
+      chat: freshChat(),
+    });
+  },
+
+  addPage(label) {
+    const { pages, tree, currentPageId } = get();
+    const trimmed = label.trim() || 'Nouvelle page';
+    const slug = freePageSlug(trimmed, new Set(pages.map((page) => page.slug)));
+
+    const newPage: SitePage = {
+      id: createId('page'),
+      slug,
+      label: trimmed,
+      tree: createStarterTree(trimmed),
+    };
+
+    set({
+      pages: [
+        ...pages.map((page) => (page.id === currentPageId ? { ...page, tree } : page)),
+        newPage,
+      ],
+      currentPageId: newPage.id,
+      tree: newPage.tree,
+      selectedId: null,
+      past: [],
+      future: [],
+      highlightedIds: [],
+      dirty: true,
+      chat: freshChat(),
+    });
+  },
+
+  renamePage(pageId, patch) {
+    set((state) => ({
+      pages: state.pages.map((page) => {
+        if (page.id !== pageId) return page;
+        const label = patch.label !== undefined ? patch.label.trim() || page.label : page.label;
+
+        // L accueil garde toujours l adresse racine ('') ; les autres pages ne
+        // peuvent jamais la reprendre, deja tenue par elle.
+        let slug = page.slug;
+        if (patch.slug !== undefined && page.slug !== '') {
+          const normalized = normalizePageSlug(patch.slug);
+          const taken = state.pages.some((other) => other.id !== pageId && other.slug === normalized);
+          if (normalized && !taken) slug = normalized;
+        }
+
+        return { ...page, label, slug };
+      }),
+      dirty: true,
+    }));
+  },
+
+  removePage(pageId) {
+    const { pages, currentPageId } = get();
+    if (pages.length <= 1) return;
+    const target = pages.find((page) => page.id === pageId);
+    // L accueil ne se supprime pas : /p/<adresse> doit toujours resoudre a une page.
+    if (!target || target.slug === '') return;
+
+    const remaining = pages.filter((page) => page.id !== pageId);
+    const isCurrent = pageId === currentPageId;
+    const nextCurrent = isCurrent
+      ? remaining[0]!
+      : remaining.find((page) => page.id === currentPageId)!;
+
+    set({
+      pages: remaining,
+      currentPageId: nextCurrent.id,
+      dirty: true,
+      ...(isCurrent
+        ? {
+            tree: nextCurrent.tree,
+            selectedId: null,
+            past: [],
+            future: [],
+            highlightedIds: [],
+            chat: freshChat(),
+          }
+        : {}),
+    });
   },
 
   select(id) {
@@ -424,13 +565,17 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
   },
 
   async save() {
-    const { projectId, tree, title, dirty, saveStatus } = get();
+    const { projectId, tree, pages, currentPageId, title, dirty, saveStatus } = get();
     if (!projectId || !dirty || saveStatus === 'saving') return;
+
+    // `tree` est la copie de travail de la page active ; les autres pages
+    // sont deja a jour dans `pages` (voir `switchPage`/`addPage`/`removePage`).
+    const upToDatePages = pages.map((page) => (page.id === currentPageId ? { ...page, tree } : page));
 
     set({ saveStatus: 'saving' });
     try {
-      await api.saveProject(projectId, { title, tree });
-      set({ saveStatus: 'saved', dirty: false, lastSavedAt: Date.now() });
+      await api.saveProject(projectId, { title, pages: upToDatePages });
+      set({ saveStatus: 'saved', dirty: false, lastSavedAt: Date.now(), pages: upToDatePages });
     } catch (error) {
       set({
         saveStatus: 'error',
@@ -493,7 +638,7 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
    * Le serveur a deja valide et sauvegarde : ici on ne fait qu afficher.
    */
   async sendPrompt(prompt) {
-    const { projectId, tree, selectedId, chat, aiPending } = get();
+    const { projectId, currentPageId, tree, selectedId, chat, aiPending } = get();
     if (!projectId || aiPending || prompt.trim().length === 0) return;
 
     const userMessage: ChatMessage = {
@@ -507,6 +652,7 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
     try {
       const result = await api.aiPrompt({
         projectId,
+        pageId: currentPageId,
         prompt: prompt.trim(),
         tree,
         selectedNodeId: selectedId,

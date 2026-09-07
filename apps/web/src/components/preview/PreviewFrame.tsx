@@ -16,17 +16,20 @@ export function PreviewFrame(): React.ReactElement {
   useEffect(() => {
     if (!requireSession()) return;
 
-    const id = new URLSearchParams(window.location.search).get('id');
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get('id');
     if (!id) {
       setError('Aucun projet indique.');
       return;
     }
+    const pageId = params.get('page');
 
     api
       .getProject(id)
       .then(({ project }) => {
+        const page = (pageId ? project.pages.find((p) => p.id === pageId) : undefined) ?? project.pages[0];
         setTitle(project.title);
-        setHtml(renderTreeToHtml(project.tree));
+        if (page) setHtml(renderTreeToHtml(page.tree));
       })
       .catch((cause: unknown) => {
         setError(cause instanceof ApiClientError ? cause.message : 'Apercu indisponible.');
