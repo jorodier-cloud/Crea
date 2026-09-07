@@ -10,6 +10,7 @@ const DESCRIPTIONS: Record<BlockType, string> = {
   calendar: 'Disponibilites et reservation',
   form: 'Contact, demande de devis',
   embed: 'Widget de reservation, carte, reseau social',
+  product: 'Produit a vendre, paiement en ligne',
 };
 
 const ICONS: Record<BlockType, string> = {
@@ -20,6 +21,7 @@ const ICONS: Record<BlockType, string> = {
   calendar: '▦',
   form: '✎',
   embed: '</>',
+  product: '€',
 };
 
 /** Palette : touche ou clic pour inserer, glisser-deposer pour placer precisement. */

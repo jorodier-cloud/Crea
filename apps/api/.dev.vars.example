@@ -14,3 +14,7 @@ RESEND_API_KEY=""
 # Sans ces cles, l upload retombe automatiquement sur /api/media/upload (via le Worker).
 R2_ACCESS_KEY_ID=""
 R2_SECRET_ACCESS_KEY=""
+
+# Chiffre les cles Stripe collees par chaque site. Generer : openssl rand -base64 32
+# Sans elle, le panneau Boutique du builder repond "paiements indisponibles".
+PAYMENTS_ENCRYPTION_KEY=""

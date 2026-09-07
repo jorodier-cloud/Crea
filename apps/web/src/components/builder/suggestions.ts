@@ -2,6 +2,7 @@ import {
   DEFAULT_BLOCK_LABEL,
   type AnyBlockNode,
   type ButtonContent,
+  type ProductContent,
   type TextContent,
 } from '@crea/schema';
 
@@ -61,6 +62,12 @@ export function suggestionsFor(node: AnyBlockNode | null): string[] {
         'Ajoute une bordure arrondie autour du widget',
         'Deplace ce widget plus haut',
       ];
+    case 'product':
+      return [
+        'Reformule la description de ce produit',
+        'Change le prix a 590 euros',
+        'Rends le libelle du bouton plus engageant',
+      ];
     case 'container':
     default:
       return [
@@ -87,6 +94,10 @@ export function describeSelection(node: AnyBlockNode): string {
   if (node.type === 'button') {
     const buttonLabel = (node.content as ButtonContent).label?.trim();
     return buttonLabel ? `${label} « ${truncate(buttonLabel, 32)} »` : label;
+  }
+  if (node.type === 'product') {
+    const name = (node.content as ProductContent).name?.trim();
+    return name ? `${label} « ${truncate(name, 32)} »` : label;
   }
   if (node.name && node.name !== label) return node.name;
   return label;

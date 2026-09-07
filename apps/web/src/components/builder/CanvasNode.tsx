@@ -8,12 +8,13 @@ import {
   type EmbedContent,
   type FormContent,
   type MediaContent,
+  type ProductContent,
   type TextContent,
 } from '@crea/schema';
 import { createElement, useState, type CSSProperties, type DragEvent, type ReactNode } from 'react';
 
 import { useBuilderStore, type DropPosition } from '../../store/builderStore.js';
-import { CalendarPreview, EmbedPreview, FormPreview } from './NodePreviews.js';
+import { CalendarPreview, EmbedPreview, FormPreview, ProductPreview } from './NodePreviews.js';
 
 const GOLD = '#C2A15A';
 const SAGE = '#9CAF88';
@@ -241,6 +242,13 @@ export function CanvasNode({ node, isRoot = false }: CanvasNodeProps): ReactNode
       return (
         <div {...handlers}>
           <EmbedPreview content={node.content as EmbedContent} />
+        </div>
+      );
+
+    case 'product':
+      return (
+        <div {...handlers}>
+          <ProductPreview content={node.content as ProductContent} />
         </div>
       );
 

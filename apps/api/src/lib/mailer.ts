@@ -177,6 +177,108 @@ export function buildContactEmail({
   return { subject, text, html };
 }
 
+/** Montant lisible, coherent avec le formatage cote rendu (render.ts : `formatPrice`). */
+function formatAmount(unitAmount: number, currency: string): string {
+  return `${(unitAmount / 100).toFixed(2)} ${currency.toUpperCase()}`;
+}
+
+/**
+ * Confirmation envoyee a l acheteur juste apres le paiement.
+ *
+ * Le paiement lui-meme est deja confirme par Stripe (page de succes,
+ * relevé bancaire) : cet email sert de trace ecrite du cote du site, pas de
+ * preuve d achat — d ou l absence de detail de facturation.
+ */
+export function buildOrderConfirmationEmail({
+  siteTitle,
+  productName,
+  unitAmount,
+  currency,
+}: {
+  siteTitle: string;
+  productName: string;
+  unitAmount: number;
+  currency: string;
+}): EmailContent {
+  const amount = formatAmount(unitAmount, currency);
+  const subject = `Confirmation de votre achat — ${productName}`;
+  const text = [
+    `Merci pour votre achat aupres de ${siteTitle}.`,
+    '',
+    `${productName} — ${amount}`,
+    '',
+    'Le vendeur revient vers vous prochainement avec la suite.',
+  ].join('\n');
+
+  const html = `<!doctype html>
+<html lang="fr">
+  <body style="margin:0;padding:32px 16px;background:#F5F2EA;font-family:Georgia,'Times New Roman',serif;color:#2F3E34;">
+    <table role="presentation" cellpadding="0" cellspacing="0" style="max-width:520px;margin:0 auto;background:#FDFBF6;border:1px solid #E3DCCB;border-radius:4px;">
+      <tr>
+        <td style="padding:36px 40px;">
+          <p style="margin:0 0 20px;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:#8A9A85;font-family:Helvetica,Arial,sans-serif;">${escapeHtml(siteTitle)}</p>
+          <h1 style="margin:0 0 20px;font-size:24px;font-weight:400;line-height:1.3;">Merci pour votre achat</h1>
+          <p style="margin:0 0 8px;font-size:16px;font-weight:600;">${escapeHtml(productName)}</p>
+          <p style="margin:0 0 24px;font-size:16px;">${escapeHtml(amount)}</p>
+          <p style="margin:0;font-size:13px;line-height:1.6;color:#8A9A85;font-family:Helvetica,Arial,sans-serif;">
+            Le vendeur revient vers vous prochainement avec la suite.
+          </p>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
+
+  return { subject, text, html };
+}
+
+/** Notification envoyee au proprietaire du site des qu une vente est confirmee. */
+export function buildOrderNotificationEmail({
+  siteTitle,
+  productName,
+  unitAmount,
+  currency,
+  customerEmail,
+  customerName,
+}: {
+  siteTitle: string;
+  productName: string;
+  unitAmount: number;
+  currency: string;
+  customerEmail: string | null;
+  customerName: string | null;
+}): EmailContent {
+  const amount = formatAmount(unitAmount, currency);
+  const subject = `Nouvelle vente — ${productName} (${amount})`;
+  const acheteur = customerName || customerEmail || 'acheteur non identifie';
+
+  const text = [
+    `Nouvelle vente sur ${siteTitle}.`,
+    '',
+    `${productName} — ${amount}`,
+    `Acheteur : ${acheteur}`,
+    ...(customerEmail ? [`Email : ${customerEmail}`] : []),
+  ].join('\n');
+
+  const html = `<!doctype html>
+<html lang="fr">
+  <body style="margin:0;padding:32px 16px;background:#F5F2EA;font-family:Georgia,'Times New Roman',serif;color:#2F3E34;">
+    <table role="presentation" cellpadding="0" cellspacing="0" style="max-width:520px;margin:0 auto;background:#FDFBF6;border:1px solid #E3DCCB;border-radius:4px;">
+      <tr>
+        <td style="padding:36px 40px;">
+          <p style="margin:0 0 20px;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:#8A9A85;font-family:Helvetica,Arial,sans-serif;">${escapeHtml(siteTitle)}</p>
+          <h1 style="margin:0 0 20px;font-size:24px;font-weight:400;line-height:1.3;">Nouvelle vente</h1>
+          <p style="margin:0 0 8px;font-size:16px;font-weight:600;">${escapeHtml(productName)} — ${escapeHtml(amount)}</p>
+          <p style="margin:0;font-size:15px;color:#5A6B57;">Acheteur : ${escapeHtml(acheteur)}</p>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
+
+  return { subject, text, html };
+}
+
 export class MailError extends Error {
   readonly status: number;
 
