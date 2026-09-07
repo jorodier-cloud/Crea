@@ -22,6 +22,7 @@ export const BLOCK_TYPES = [
   'button',
   'calendar',
   'form',
+  'embed',
 ] as const;
 
 export type BlockType = (typeof BLOCK_TYPES)[number];
@@ -210,6 +211,16 @@ export interface FormContent {
   successMessage: string;
 }
 
+/**
+ * Widget ou code tiers colle tel quel (iframe/script) : reservation Lodgify,
+ * carte, reseau social... Saisi uniquement par le proprietaire du site dans
+ * l inspecteur, jamais par l IA (voir ai.ts) ni par un visiteur — c est ce qui
+ * permet de le rendre sans echappement (render.ts).
+ */
+export interface EmbedContent {
+  html: string;
+}
+
 export interface ContentByType {
   container: ContainerContent;
   text: TextContent;
@@ -217,6 +228,7 @@ export interface ContentByType {
   button: ButtonContent;
   calendar: CalendarContent;
   form: FormContent;
+  embed: EmbedContent;
 }
 
 export type BlockContent = ContentByType[BlockType];

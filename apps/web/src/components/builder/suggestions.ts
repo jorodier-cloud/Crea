@@ -55,6 +55,12 @@ export function suggestionsFor(node: AnyBlockNode | null): string[] {
         'Change le texte du bouton d envoi',
         'Change le message affiche apres l envoi',
       ];
+    case 'embed':
+      return [
+        'Agrandis cet espace',
+        'Ajoute une bordure arrondie autour du widget',
+        'Deplace ce widget plus haut',
+      ];
     case 'container':
     default:
       return [

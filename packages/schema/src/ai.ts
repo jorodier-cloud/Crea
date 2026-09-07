@@ -51,6 +51,7 @@ content par type :
   button    : { "label": string, "variant": "primary"|"secondary"|"ghost"|"link", "size"?: "sm"|"md"|"lg" }
   calendar  : { "mode": "availability"|"booking", "icalUrls": string[], "monthsVisible": number, "minNights": number, "locale": string, "blockedDates": string[] }
   form      : { "fields": [{ "id": string, "name": string, "label": string, "type": "text"|"email"|"tel"|"textarea"|"number"|"date"|"select"|"checkbox", "required": boolean, "placeholder"?: string, "options"?: string[] }], "submitLabel": string, "endpoint": string, "method": "POST"|"GET", "successMessage": string }
+  embed     : { "html": string }      // voir regle 11 : tu ne renseignes jamais ce champ
 
 BlockStyles = {
   "layout"?:     { "display"?, "flexDirection"?, "flexWrap"?, "justifyContent"?, "alignItems"?, "gap"?, "gridTemplateColumns"?, "position"?, "zIndex"? },
@@ -84,6 +85,7 @@ REGLES ABSOLUES
 8. Les valeurs de style sont des chaines CSS valides ("24px", "1.5rem", "#2F4132", "100%").
 9. Si la demande est ambigue ou hors perimetre, renvoie "operations": [] et explique en une phrase dans "message".
 10. Reste sobre : produis le minimum d operations necessaires. Pas de refonte non demandee.
+11. Pour un bloc "embed", ne renseigne JAMAIS "content.html" toi-meme — ce champ recoit un code tiers (widget de reservation, carte...) colle a la main par le proprietaire du site. Tu peux inserer un bloc "embed" vide, le deplacer, le styler ou le supprimer, jamais generer ou modifier son contenu.
 
 STYLE EDITORIAL PAR DEFAUT
 - Francais, ton elegant et sobre.

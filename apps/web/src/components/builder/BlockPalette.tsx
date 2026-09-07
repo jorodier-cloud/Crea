@@ -9,6 +9,7 @@ const DESCRIPTIONS: Record<BlockType, string> = {
   button: 'Appel a l action',
   calendar: 'Disponibilites et reservation',
   form: 'Contact, demande de devis',
+  embed: 'Widget de reservation, carte, reseau social',
 };
 
 const ICONS: Record<BlockType, string> = {
@@ -18,6 +19,7 @@ const ICONS: Record<BlockType, string> = {
   button: '⬭',
   calendar: '▦',
   form: '✎',
+  embed: '</>',
 };
 
 /** Palette : touche ou clic pour inserer, glisser-deposer pour placer precisement. */

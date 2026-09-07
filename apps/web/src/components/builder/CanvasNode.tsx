@@ -5,6 +5,7 @@ import {
   type ButtonContent,
   type CalendarContent,
   type ContainerContent,
+  type EmbedContent,
   type FormContent,
   type MediaContent,
   type TextContent,
@@ -12,7 +13,7 @@ import {
 import { createElement, useState, type CSSProperties, type DragEvent, type ReactNode } from 'react';
 
 import { useBuilderStore, type DropPosition } from '../../store/builderStore.js';
-import { CalendarPreview, FormPreview } from './NodePreviews.js';
+import { CalendarPreview, EmbedPreview, FormPreview } from './NodePreviews.js';
 
 const GOLD = '#C2A15A';
 const SAGE = '#9CAF88';
@@ -233,6 +234,13 @@ export function CanvasNode({ node, isRoot = false }: CanvasNodeProps): ReactNode
         <div {...handlers}>
           <FormPreview content={node.content as FormContent} />
           {children}
+        </div>
+      );
+
+    case 'embed':
+      return (
+        <div {...handlers}>
+          <EmbedPreview content={node.content as EmbedContent} />
         </div>
       );
 

@@ -4,6 +4,7 @@ import {
   type ButtonContent,
   type CalendarContent,
   type ContainerContent,
+  type EmbedContent,
   type FormContent,
   type FormField,
   type FormFieldType,
@@ -337,6 +338,26 @@ export function ContentFields({ node, mode, onChange }: ContentFieldsProps): Rea
             </button>
           </Section>
         </>
+      );
+    }
+
+    case 'embed': {
+      const content = node.content as EmbedContent;
+      return (
+        <Section title="Widget">
+          <p className="mb-1 text-[11px] leading-relaxed text-muted">
+            Collez ici le code fourni par le service externe (reservation Lodgify, carte,
+            reseau social...). Affiche tel quel sur le site publie ; sans effet dans cet
+            apercu.
+          </p>
+          <TextField
+            label="Code du widget"
+            value={content.html}
+            multiline
+            placeholder="<script>…</script> ou <iframe>…</iframe>"
+            onChange={(html) => onChange({ html })}
+          />
+        </Section>
       );
     }
 

@@ -1,4 +1,4 @@
-import type { CalendarContent, FormContent } from '@crea/schema';
+import type { CalendarContent, EmbedContent, FormContent } from '@crea/schema';
 
 /**
  * Apercus non interactifs des blocs composites.
@@ -86,6 +86,40 @@ export function CalendarPreview({ content }: { content: CalendarContent }): Reac
         Sejour minimum : {content.minNights ?? 1} nuits
         {content.icalUrls.length > 0 ? ` — ${content.icalUrls.length} flux iCal` : ''}
       </p>
+    </div>
+  );
+}
+
+/**
+ * Un `<script>` insere via `dangerouslySetInnerHTML` ne s execute jamais dans
+ * le navigateur (comportement standard, pas un bug) : le widget reel n est
+ * donc visible qu une fois le site publie. On le dit plutot que de laisser un
+ * emplacement muet.
+ */
+export function EmbedPreview({ content }: { content: EmbedContent }): React.ReactElement {
+  const hasCode = (content.html ?? '').trim().length > 0;
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 6,
+        minHeight: 120,
+        width: '100%',
+        border: '1px dashed #9CAF88',
+        borderRadius: 8,
+        padding: 16,
+        textAlign: 'center',
+        color: '#8A907F',
+        fontSize: 13,
+      }}
+    >
+      <span>{hasCode ? 'Widget integre' : 'Aucun code colle pour ce widget'}</span>
+      <span style={{ fontSize: 11, opacity: 0.8 }}>
+        Visible sur le site une fois publie — pas d apercu ici.
+      </span>
     </div>
   );
 }

@@ -76,6 +76,9 @@ const BASE_CONTENT: { [K in BlockType]: () => ContentByType[K] } = {
     method: 'POST',
     successMessage: 'Merci, votre message est bien parti.',
   }),
+  embed: () => ({
+    html: '',
+  }),
 };
 
 const BASE_STYLES: { [K in BlockType]: () => BlockStyles } = {
@@ -105,6 +108,10 @@ const BASE_STYLES: { [K in BlockType]: () => BlockStyles } = {
     layout: { display: 'flex', flexDirection: 'column', gap: '14px' },
     size: { maxWidth: '520px' },
   }),
+  embed: () => ({
+    size: { minHeight: '320px' },
+    border: { radius: DEFAULT_THEME.radius },
+  }),
 };
 
 export const DEFAULT_BLOCK_LABEL: Record<BlockType, string> = {
@@ -114,6 +121,7 @@ export const DEFAULT_BLOCK_LABEL: Record<BlockType, string> = {
   button: 'Bouton',
   calendar: 'Calendrier',
   form: 'Formulaire',
+  embed: 'Widget',
 };
 
 /** Fabrique un noeud complet et valide pour un type donne. */
