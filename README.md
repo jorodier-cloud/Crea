@@ -102,6 +102,7 @@ magic link s'affiche directement dans la page.
 | | `ANTHROPIC_API_KEY` | Cle du moteur IA |
 | | `RESEND_API_KEY` | Cle d'envoi des emails |
 | | `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` | Jeton S3 de R2 |
+| | `PAYMENTS_ENCRYPTION_KEY` | Chiffre les cles Stripe de chaque site — generee automatiquement au deploiement |
 | `apps/web/.env` | `PUBLIC_API_URL` | URL de l'API |
 
 Sans cles S3, l'upload bascule automatiquement sur `/api/media/upload`
@@ -112,7 +113,8 @@ Sans cles S3, l'upload bascule automatiquement sur `/api/media/upload`
 ## Base de donnees (D1)
 
 Migrations : `apps/api/migrations/` — `0001_init.sql` (schema initial),
-`0002_publish.sql` (publication), `0003_messages.sql` (demandes de contact).
+`0002_publish.sql` (publication), `0003_messages.sql` (demandes de contact),
+`0004_payments.sql` (cles Stripe et commandes).
 
 ### `Users`
 
@@ -172,6 +174,8 @@ Migrations : `apps/api/migrations/` — `0001_init.sql` (schema initial),
 | `button` | non | `label`, `variant`, `size` |
 | `calendar` | non | `mode`, `icalUrls`, `monthsVisible`, `minNights`, `blockedDates` |
 | `form` | oui | `fields[]`, `submitLabel`, `endpoint`, `successMessage` |
+| `embed` | non | `html` (widget tiers colle par le proprietaire, jamais par l'IA) |
+| `product` | non | `name`, `description`, `price`, `currency`, `image`, `buttonLabel` |
 
 ### Styles
 
@@ -442,6 +446,7 @@ npx wrangler d1 create crea            # -> reporter database_id dans wrangler.t
 npx wrangler r2 bucket create crea-media
 
 npx wrangler secret put SESSION_SECRET
+npx wrangler secret put PAYMENTS_ENCRYPTION_KEY  # chiffre les cles Stripe de chaque site
 npx wrangler secret put ANTHROPIC_API_KEY
 npx wrangler secret put R2_ACCESS_KEY_ID      # optionnel, voir plus bas
 npx wrangler secret put R2_SECRET_ACCESS_KEY  # optionnel
@@ -501,6 +506,32 @@ encore dans le builder — elles se lisent pour l instant en base :
 npx wrangler d1 execute crea --remote --command \
   "SELECT created_at, sender_name, sender_email, payload FROM Messages ORDER BY created_at DESC LIMIT 20"
 ```
+
+### Paiement natif (Stripe)
+
+Un bloc `product` s achete via une session [Stripe Checkout](https://stripe.com/docs/payments/checkout)
+hebergee par Stripe : la carte du visiteur ne transite jamais par ce Worker.
+Chaque site connecte **son propre compte Stripe** (cles collees dans l onglet
+« Boutique » du builder) — l argent va directement chez le proprietaire, Crea
+ne le detient jamais et n a donc pas besoin d agrement de plateforme de
+paiement (Stripe Connect).
+
+| Route | Role |
+| --- | --- |
+| `POST /p/<adresse>/checkout` | cree la session Stripe et redirige (`303`), comme le formulaire de contact |
+| `GET /p/<adresse>/checkout/success` | page de retour apres paiement |
+| `POST /webhooks/stripe/:projectId` | confirme la vente (signature verifiee, secret propre a chaque projet) |
+| `GET/PUT/DELETE /api/projects/:id/payments` | connexion, mise a jour, deconnexion du compte Stripe |
+| `GET /api/projects/:id/orders` | commandes du projet |
+
+Les cles Stripe (secrete et de webhook) sont chiffrees au repos avec
+`PAYMENTS_ENCRYPTION_KEY` (AES-GCM, `lib/crypto.ts`) — jamais en clair en
+base. Ce secret est **genere automatiquement au premier deploiement**, comme
+`SESSION_SECRET` : rien a configurer pour l activer.
+
+Les commandes s accumulent dans la table `Orders`, une ligne des la tentative
+d achat (`pending`) puis confirmee par le webhook (`paid`) — meme logique que
+`Messages` : un webhook qui se perd laisse la commande visible, pas absente.
 
 ### Envoi des emails
 

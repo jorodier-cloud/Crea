@@ -4,10 +4,19 @@ import { useBuilderStore, useSelectedNode } from '../../store/builderStore.js';
 import { BlockPalette } from './BlockPalette.js';
 import { LayerTree } from './LayerTree.js';
 import { PagesPanel } from './PagesPanel.js';
+import { PaymentsPanel } from './PaymentsPanel.js';
 import { PointsGauge } from './PointsGauge.js';
 import { describeSelection, suggestionsFor } from './suggestions.js';
 
-type Tab = 'chat' | 'blocs' | 'calques' | 'pages';
+type Tab = 'chat' | 'blocs' | 'calques' | 'pages' | 'boutique';
+
+const TAB_LABEL: Record<Tab, string> = {
+  chat: 'Chat IA',
+  blocs: 'blocs',
+  calques: 'calques',
+  pages: 'pages',
+  boutique: 'Boutique',
+};
 
 /** Zone gauche : chat IA, jauge de points, palette de blocs, arborescence. */
 export function LeftPanel(): React.ReactElement {
@@ -40,19 +49,19 @@ export function LeftPanel(): React.ReactElement {
     <aside className="crea-panel flex w-full min-w-0 flex-col border-r lg:w-[340px] lg:shrink-0">
       <PointsGauge />
 
-      <nav className="flex border-b border-line text-[12px] font-semibold">
-        {(['chat', 'blocs', 'calques', 'pages'] as Tab[]).map((item) => (
+      <nav className="flex border-b border-line text-[12px] font-semibold overflow-x-auto">
+        {(['chat', 'blocs', 'calques', 'pages', 'boutique'] as Tab[]).map((item) => (
           <button
             key={item}
             type="button"
             onClick={() => setTab(item)}
-            className={`flex-1 px-3 py-2.5 capitalize transition-colors ${
+            className={`flex-1 px-3 py-2.5 capitalize whitespace-nowrap transition-colors ${
               tab === item
                 ? 'border-b-2 border-forest text-forest'
                 : 'text-muted hover:text-forest'
             }`}
           >
-            {item === 'chat' ? 'Chat IA' : item}
+            {TAB_LABEL[item]}
           </button>
         ))}
       </nav>
@@ -60,6 +69,7 @@ export function LeftPanel(): React.ReactElement {
       {tab === 'blocs' && <BlockPalette />}
       {tab === 'calques' && <LayerTree />}
       {tab === 'pages' && <PagesPanel />}
+      {tab === 'boutique' && <PaymentsPanel />}
 
       {tab === 'chat' && (
         <>

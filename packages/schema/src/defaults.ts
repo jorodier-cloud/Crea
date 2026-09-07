@@ -79,6 +79,14 @@ const BASE_CONTENT: { [K in BlockType]: () => ContentByType[K] } = {
   embed: () => ({
     html: '',
   }),
+  product: () => ({
+    name: 'Nouveau produit',
+    description: 'Decrivez ici ce que ce produit propose.',
+    price: 0,
+    currency: 'eur',
+    image: '',
+    buttonLabel: 'Acheter',
+  }),
 };
 
 const BASE_STYLES: { [K in BlockType]: () => BlockStyles } = {
@@ -112,6 +120,13 @@ const BASE_STYLES: { [K in BlockType]: () => BlockStyles } = {
     size: { minHeight: '320px' },
     border: { radius: DEFAULT_THEME.radius },
   }),
+  product: () => ({
+    layout: { display: 'flex', flexDirection: 'column', gap: '12px' },
+    background: { color: '#FFFFFF' },
+    border: { width: '1px', style: 'solid', color: '#E3DED2', radius: DEFAULT_THEME.radius },
+    spacing: { padding: { top: '20px', right: '20px', bottom: '20px', left: '20px' } },
+    size: { maxWidth: '360px' },
+  }),
 };
 
 export const DEFAULT_BLOCK_LABEL: Record<BlockType, string> = {
@@ -122,6 +137,7 @@ export const DEFAULT_BLOCK_LABEL: Record<BlockType, string> = {
   calendar: 'Calendrier',
   form: 'Formulaire',
   embed: 'Widget',
+  product: 'Produit',
 };
 
 /** Fabrique un noeud complet et valide pour un type donne. */

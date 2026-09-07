@@ -56,6 +56,48 @@ export function timingSafeEqual(a: string, b: string): boolean {
   return diff === 0;
 }
 
+/**
+ * Chiffrement au repos des cles Stripe saisies par chaque proprietaire de
+ * site (voir services/payments.ts). `SESSION_SECRET` sert deja de sel aux
+ * empreintes d IP ; ici il faut un vrai chiffrement reversible puisque la
+ * cle secrete doit repartir en clair vers l API Stripe au moment de creer
+ * une session de paiement — d ou une cle dediee (`PAYMENTS_ENCRYPTION_KEY`)
+ * plutot que de reutiliser `SESSION_SECRET`, pour ne pas faire deux usages
+ * d un seul secret.
+ */
+async function encryptionKey(secret: string): Promise<CryptoKey> {
+  const digest = await crypto.subtle.digest('SHA-256', encoder.encode(secret));
+  return crypto.subtle.importKey('raw', digest, { name: 'AES-GCM' }, false, [
+    'encrypt',
+    'decrypt',
+  ]);
+}
+
+/** Chiffre `plaintext`. IV aleatoire prefixe au texte chiffre, le tout en base64url. */
+export async function encryptSecret(secret: string, plaintext: string): Promise<string> {
+  const key = await encryptionKey(secret);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, encoder.encode(plaintext));
+  const combined = new Uint8Array(iv.length + ciphertext.byteLength);
+  combined.set(iv, 0);
+  combined.set(new Uint8Array(ciphertext), iv.length);
+  return toBase64Url(combined);
+}
+
+/** Inverse de `encryptSecret`. `null` si le texte est illisible (cle changee, corruption). */
+export async function decryptSecret(secret: string, encoded: string): Promise<string | null> {
+  try {
+    const key = await encryptionKey(secret);
+    const combined = fromBase64Url(encoded);
+    const iv = combined.slice(0, 12);
+    const ciphertext = combined.slice(12);
+    const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ciphertext);
+    return decoder.decode(plaintext);
+  } catch {
+    return null;
+  }
+}
+
 export interface SessionPayload {
   sub: string;
   email: string;

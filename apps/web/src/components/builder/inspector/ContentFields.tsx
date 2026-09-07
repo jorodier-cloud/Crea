@@ -9,6 +9,7 @@ import {
   type FormField,
   type FormFieldType,
   type MediaContent,
+  type ProductContent,
   type TextContent,
 } from '@crea/schema';
 
@@ -36,6 +37,13 @@ const TEXT_TAGS = [
   { value: 'p', label: 'Paragraphe' },
   { value: 'span', label: 'Texte en ligne' },
   { value: 'blockquote', label: 'Citation' },
+] as const;
+
+const CURRENCIES = [
+  { value: 'eur', label: 'Euro (€)' },
+  { value: 'usd', label: 'Dollar americain ($)' },
+  { value: 'gbp', label: 'Livre sterling (£)' },
+  { value: 'chf', label: 'Franc suisse (CHF)' },
 ] as const;
 
 const FIELD_TYPES = [
@@ -356,6 +364,54 @@ export function ContentFields({ node, mode, onChange }: ContentFieldsProps): Rea
             multiline
             placeholder="<script>…</script> ou <iframe>…</iframe>"
             onChange={(html) => onChange({ html })}
+          />
+        </Section>
+      );
+    }
+
+    case 'product': {
+      const content = node.content as ProductContent;
+      return (
+        <Section title="Produit">
+          <p className="mb-1 text-[11px] leading-relaxed text-muted">
+            Le paiement se fait via Stripe : connectez votre compte dans l onglet
+            « Boutique » pour que le bouton d achat fonctionne sur le site publie.
+          </p>
+          <MediaPicker
+            onSelect={(media) => onChange({ image: media.url })}
+          />
+          <TextField
+            label="Image"
+            value={content.image}
+            placeholder="https://…"
+            onChange={(image) => onChange({ image })}
+          />
+          <TextField label="Nom du produit" value={content.name} onChange={(name) => onChange({ name })} />
+          <TextField
+            label="Description"
+            value={content.description}
+            multiline
+            onChange={(description) => onChange({ description })}
+          />
+          <div className="grid grid-cols-2 gap-2">
+            <NumberField
+              label="Prix"
+              value={content.price}
+              min={0}
+              step={0.01}
+              onChange={(price) => onChange({ price })}
+            />
+            <SelectField
+              label="Devise"
+              value={content.currency}
+              options={CURRENCIES}
+              onChange={(currency) => onChange({ currency })}
+            />
+          </div>
+          <TextField
+            label="Libelle du bouton"
+            value={content.buttonLabel}
+            onChange={(buttonLabel) => onChange({ buttonLabel })}
           />
         </Section>
       );

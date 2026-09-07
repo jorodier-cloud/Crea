@@ -9,6 +9,7 @@ import {
 } from '@crea/schema';
 
 import type { AppBindings } from '../env.js';
+import { findProductNode, productContent, PRODUCT_ID_FIELD } from '../lib/checkout.js';
 import {
   FORM_ID_FIELD,
   HONEYPOT_FIELD,
@@ -17,8 +18,9 @@ import {
   missingRequired,
   readSubmission,
 } from '../lib/contact.js';
-import { badRequest, notFound } from '../lib/http.js';
+import { badGateway, badRequest, notConfigured, notFound } from '../lib/http.js';
 import { buildContactEmail, isMailerConfigured, sendEmail } from '../lib/mailer.js';
+import { createCheckoutSession, StripeError } from '../lib/stripe.js';
 import { fetchCalendarBlockedDates } from '../services/ical.js';
 import {
   assertUnderRateLimit,
@@ -28,6 +30,7 @@ import {
   newMessageId,
   storeMessage,
 } from '../services/messages.js';
+import { createOrder, getStripeSecretForSlug } from '../services/payments.js';
 import { getPublishedBySlug, type PublishedSite } from '../services/projects.js';
 
 /** Chemin public d une page ('' = accueil, sert la racine du slug). */
@@ -146,7 +149,12 @@ async function renderSitePage(
   const tree = applyCalendarSync(page.tree, syncedBlockedDates);
   // Les formulaires qui ne declarent pas d adresse visent la reception
   // integree, servie juste en dessous — commune a toutes les pages du site.
-  const html = renderTreeToHtml(tree, { formEndpoint: `/p/${slug}/contact` });
+  // Meme logique pour l achat : le bouton pointe toujours vers la route de
+  // paiement, qui repond elle-meme si Stripe n est pas encore configure.
+  const html = renderTreeToHtml(tree, {
+    formEndpoint: `/p/${slug}/contact`,
+    checkoutEndpoint: `/p/${slug}/checkout`,
+  });
 
   return new Response(html, {
     status: 200,
@@ -252,6 +260,88 @@ publicRoutes.post('/:slug/contact', async (c) => {
       backHref: pagePath(slug, found.page.slug),
       title: site.title,
       message: content.successMessage ?? null,
+    }),
+    200,
+  );
+});
+
+/**
+ * Achat d un produit : reception d une navigation POST (pas d appel JSON),
+ * exactement comme le formulaire de contact ci-dessus. Elle cree la session
+ * de paiement chez Stripe puis redirige — la carte du visiteur ne transite
+ * jamais par ce Worker, Stripe l heberge sur sa propre page.
+ */
+publicRoutes.post('/:slug/checkout', async (c) => {
+  const slug = c.req.param('slug').toLowerCase();
+  if (!SLUG_PATTERN.test(slug)) throw badRequest('Adresse invalide.');
+
+  const submitted = await readFormBody(c.req.raw);
+  const productId = submitted[PRODUCT_ID_FIELD];
+  if (!productId) throw badRequest('Produit non precise.');
+
+  const [site, credentials] = await Promise.all([
+    getPublishedBySlug(c.env, slug),
+    getStripeSecretForSlug(c.env, slug),
+  ]);
+  if (!credentials) throw notConfigured('Le proprietaire de ce site n a pas encore active les paiements.');
+
+  const node = findProductNode(site.pages, productId);
+  if (!node) throw notFound('Produit introuvable.');
+  const content = productContent(node);
+
+  const currency = (content.currency || 'eur').toLowerCase();
+  const unitAmount = Math.round(Math.max(0, content.price ?? 0) * 100);
+  if (unitAmount <= 0) throw badRequest('Ce produit n a pas encore de prix.');
+
+  const origin = new URL(c.req.url).origin;
+
+  let session;
+  try {
+    session = await createCheckoutSession(credentials.secretKey, {
+      successUrl: `${origin}/p/${slug}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancelUrl: `${origin}/p/${slug}`,
+      productName: content.name || 'Produit',
+      description: content.description,
+      unitAmount,
+      currency,
+      metadata: { project_id: credentials.projectId, product_node_id: node.id, slug },
+    });
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: 'checkout_session_failed',
+        slug,
+        reason: error instanceof StripeError ? error.message : String(error),
+      }),
+    );
+    throw badGateway('Paiement momentanement indisponible. Reessayez dans un instant.');
+  }
+  if (!session.url) throw badGateway('Paiement momentanement indisponible. Reessayez dans un instant.');
+
+  // Ecrite avant la redirection : une tentative d achat existe des ce point,
+  // meme si le visiteur abandonne sur la page Stripe.
+  await createOrder(c.env, {
+    projectId: credentials.projectId,
+    slug,
+    productNodeId: node.id,
+    productName: content.name || 'Produit',
+    unitAmount,
+    currency,
+    stripeSessionId: session.id,
+    createdAt: Math.floor(Date.now() / 1000),
+  });
+
+  return c.redirect(session.url, 303);
+});
+
+/** Page affichee au retour de Stripe apres paiement. */
+publicRoutes.get('/:slug/checkout/success', (c) => {
+  const slug = c.req.param('slug').toLowerCase();
+  return c.html(
+    confirmationPage({
+      backHref: `/p/${slug}`,
+      title: '',
+      message: 'Paiement recu, merci. Une confirmation vous est envoyee par email.',
     }),
     200,
   );

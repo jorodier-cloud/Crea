@@ -10,6 +10,7 @@ import { authRoutes } from './routes/auth.js';
 import { mediaRoutes } from './routes/media.js';
 import { projectRoutes } from './routes/projects.js';
 import { publicRoutes } from './routes/public.js';
+import { webhookRoutes } from './routes/webhooks.js';
 
 const app = new Hono<AppBindings>();
 
@@ -45,6 +46,8 @@ app.get('/api/health', async (c) => {
     // Sans cet envoi, personne ne peut se connecter en production : le
     // diagnostic doit le montrer au meme titre que la base.
     mail: isMailerConfigured(c.env),
+    // Sans elle, aucun site ne peut encaisser de paiement.
+    payments: Boolean(c.env.PAYMENTS_ENCRYPTION_KEY),
   };
   try {
     await c.env.DB.prepare('SELECT 1').first();
@@ -57,6 +60,9 @@ app.get('/api/health', async (c) => {
 
 // Sites publies : seule surface sans authentification.
 app.route('/p', publicRoutes);
+
+// Webhooks Stripe : authentifies par signature, pas par session.
+app.route('/webhooks', webhookRoutes);
 
 app.route('/api/auth', authRoutes);
 app.route('/api/projects', projectRoutes);

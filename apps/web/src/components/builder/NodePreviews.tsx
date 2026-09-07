@@ -1,4 +1,4 @@
-import type { CalendarContent, EmbedContent, FormContent } from '@crea/schema';
+import type { CalendarContent, EmbedContent, FormContent, ProductContent } from '@crea/schema';
 
 /**
  * Apercus non interactifs des blocs composites.
@@ -119,6 +119,65 @@ export function EmbedPreview({ content }: { content: EmbedContent }): React.Reac
       <span>{hasCode ? 'Widget integre' : 'Aucun code colle pour ce widget'}</span>
       <span style={{ fontSize: 11, opacity: 0.8 }}>
         Visible sur le site une fois publie — pas d apercu ici.
+      </span>
+    </div>
+  );
+}
+
+const CURRENCY_SYMBOLS: Record<string, string> = { eur: '€', usd: '$', gbp: '£', chf: 'CHF' };
+
+/** Meme formule que `formatPrice` dans render.ts : l apercu doit annoncer le meme prix que le site publie. */
+function formatPrice(amount: number, currency: string): string {
+  const code = (currency || 'eur').toLowerCase();
+  const symbol = CURRENCY_SYMBOLS[code] ?? code.toUpperCase();
+  return `${Math.max(0, amount).toFixed(2)} ${symbol}`;
+}
+
+export function ProductPreview({ content }: { content: ProductContent }): React.ReactElement {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%' }}>
+      {content.image ? (
+        <img
+          src={content.image}
+          alt={content.name}
+          style={{ width: '100%', aspectRatio: '4 / 3', objectFit: 'cover', borderRadius: 6 }}
+        />
+      ) : (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            aspectRatio: '4 / 3',
+            width: '100%',
+            background: '#EFE8DA',
+            color: '#8A907F',
+            fontSize: 13,
+            borderRadius: 6,
+          }}
+        >
+          Sans image
+        </div>
+      )}
+      <p style={{ margin: 0, fontSize: 17, fontWeight: 600 }}>{content.name || 'Produit sans nom'}</p>
+      {content.description && (
+        <p style={{ margin: 0, fontSize: 13, lineHeight: 1.6, opacity: 0.8 }}>{content.description}</p>
+      )}
+      <p style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>
+        {formatPrice(content.price ?? 0, content.currency ?? 'eur')}
+      </p>
+      <span
+        style={{
+          alignSelf: 'flex-start',
+          padding: '11px 24px',
+          borderRadius: 999,
+          background: '#2F4132',
+          color: '#fff',
+          fontWeight: 600,
+          fontSize: 14,
+        }}
+      >
+        {content.buttonLabel || 'Acheter'}
       </span>
     </div>
   );

@@ -20,6 +20,8 @@ export interface Env {
   RESEND_API_KEY: string;
   R2_ACCESS_KEY_ID: string;
   R2_SECRET_ACCESS_KEY: string;
+  /** Chiffre les cles Stripe de chaque projet au repos. Sans elle, paiements indisponibles. */
+  PAYMENTS_ENCRYPTION_KEY?: string;
 }
 
 export interface SessionUser {

@@ -50,6 +50,7 @@ bucket_name = "crea-media"
 #   npx wrangler secret put RESEND_API_KEY
 #   npx wrangler secret put R2_ACCESS_KEY_ID
 #   npx wrangler secret put R2_SECRET_ACCESS_KEY
+#   npx wrangler secret put PAYMENTS_ENCRYPTION_KEY   # chiffre les cles Stripe de chaque site
 # En local, les memes cles se declarent dans .dev.vars (voir .dev.vars.example).
 # --------------------------------------------------------------------------
 

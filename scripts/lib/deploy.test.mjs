@@ -17,10 +17,14 @@ import {
 } from './deploy.mjs';
 
 const EMPTY_SECRETS = '[]';
-const WITH_SESSION = '[{"name":"SESSION_SECRET"}]';
-const WITH_BOTH = '[{"name":"SESSION_SECRET"},{"name":"ANTHROPIC_API_KEY"}]';
+// Les deux cles internes (jamais fournies par l utilisateur, generees au
+// premier deploiement) sont deja posees dans ces fixtures : le test porte
+// sur les cles externes, pas sur elles.
+const WITH_SESSION = '[{"name":"SESSION_SECRET"},{"name":"PAYMENTS_ENCRYPTION_KEY"}]';
+const WITH_BOTH =
+  '[{"name":"SESSION_SECRET"},{"name":"PAYMENTS_ENCRYPTION_KEY"},{"name":"ANTHROPIC_API_KEY"}]';
 const WITH_ALL =
-  '[{"name":"SESSION_SECRET"},{"name":"ANTHROPIC_API_KEY"},{"name":"RESEND_API_KEY"}]';
+  '[{"name":"SESSION_SECRET"},{"name":"PAYMENTS_ENCRYPTION_KEY"},{"name":"ANTHROPIC_API_KEY"},{"name":"RESEND_API_KEY"}]';
 
 test('SESSION_SECRET est genere une seule fois', () => {
   const first = planSecrets(EMPTY_SECRETS);
@@ -29,6 +33,16 @@ test('SESSION_SECRET est genere une seule fois', () => {
   assert.ok(session.value.length >= 64, 'valeur trop courte pour 48 octets en base64');
 
   // Deja pose : ne pas le regenerer, cela deconnecterait tout le monde.
+  assert.equal(planSecrets(WITH_SESSION).length, 0);
+});
+
+test('PAYMENTS_ENCRYPTION_KEY est generee une seule fois', () => {
+  const first = planSecrets(EMPTY_SECRETS);
+  const key = first.find((entry) => entry.name === 'PAYMENTS_ENCRYPTION_KEY');
+  assert.ok(key, 'PAYMENTS_ENCRYPTION_KEY aurait du etre planifiee');
+  assert.ok(key.value.length >= 40, 'valeur trop courte pour 32 octets en base64');
+
+  // Deja posee : la regenerer rendrait illisibles les cles Stripe deja chiffrees.
   assert.equal(planSecrets(WITH_SESSION).length, 0);
 });
 

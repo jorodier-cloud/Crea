@@ -23,6 +23,7 @@ export const BLOCK_TYPES = [
   'calendar',
   'form',
   'embed',
+  'product',
 ] as const;
 
 export type BlockType = (typeof BLOCK_TYPES)[number];
@@ -221,6 +222,23 @@ export interface EmbedContent {
   html: string;
 }
 
+/**
+ * Produit vendable : paiement encaisse nativement (Stripe Checkout, cle
+ * propre au proprietaire du site — voir services/payments.ts cote API), pas
+ * un simple lien vers un service tiers. `price` est exprime en unite
+ * majeure de `currency` (ex. 149.90 pour 149,90 EUR) ; converti en
+ * centimes uniquement au moment de creer la session de paiement.
+ */
+export interface ProductContent {
+  name: string;
+  description: string;
+  price: number;
+  /** Code ISO 4217 en minuscules (ex. "eur", "usd"). */
+  currency: string;
+  image: string;
+  buttonLabel: string;
+}
+
 export interface ContentByType {
   container: ContainerContent;
   text: TextContent;
@@ -229,6 +247,7 @@ export interface ContentByType {
   calendar: CalendarContent;
   form: FormContent;
   embed: EmbedContent;
+  product: ProductContent;
 }
 
 export type BlockContent = ContentByType[BlockType];

@@ -105,6 +105,23 @@ export interface AiPromptResult {
   points: { spent: number; balance: number; overdrawn: boolean };
 }
 
+export interface PaymentSettings {
+  configured: boolean;
+  publicKey: string | null;
+}
+
+export interface Order {
+  id: string;
+  productName: string;
+  unitAmount: number;
+  currency: string;
+  customerEmail: string | null;
+  customerName: string | null;
+  status: 'pending' | 'paid' | 'failed' | 'expired';
+  createdAt: number;
+  paidAt: number | null;
+}
+
 interface PresignResult {
   mode: 'worker' | 's3';
   key: string;
@@ -163,6 +180,23 @@ export const api = {
 
   deleteProject: (id: string) =>
     request<{ ok: true }>(`/api/projects/${id}`, { method: 'DELETE' }),
+
+  getPaymentSettings: (projectId: string) =>
+    request<{ settings: PaymentSettings; webhookUrl: string }>(`/api/projects/${projectId}/payments`),
+
+  savePaymentSettings: (
+    projectId: string,
+    input: { publicKey: string; secretKey: string; webhookSecret: string },
+  ) =>
+    request<{ settings: PaymentSettings }>(`/api/projects/${projectId}/payments`, {
+      method: 'PUT',
+      body: JSON.stringify(input),
+    }),
+
+  disconnectPayments: (projectId: string) =>
+    request<{ ok: true }>(`/api/projects/${projectId}/payments`, { method: 'DELETE' }),
+
+  listOrders: (projectId: string) => request<{ orders: Order[] }>(`/api/projects/${projectId}/orders`),
 
   listMedias: () => request<{ medias: Media[] }>('/api/media'),
 

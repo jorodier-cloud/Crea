@@ -9,6 +9,7 @@ import type {
   FormContent,
   MediaContent,
   PageTree,
+  ProductContent,
   TextContent,
 } from './types/schema.js';
 
@@ -82,18 +83,21 @@ function styleAttr(node: AnyBlockNode): string {
 /* Rendu par type                                                             */
 /* -------------------------------------------------------------------------- */
 
-function renderContainer(
-  node: AnyBlockNode,
-  depth: number,
-  today: Date,
-  formEndpoint: string | null,
-): string {
+/**
+ * Contexte fige au niveau de l arbre, transmis aux noeuds qui en ont besoin
+ * plutot que multiplie en parametres positionnels au fil des niveaux.
+ */
+interface RenderCtx {
+  today: Date;
+  formEndpoint: string | null;
+  checkoutEndpoint: string | null;
+}
+
+function renderContainer(node: AnyBlockNode, depth: number, ctx: RenderCtx): string {
   const content = node.content as ContainerContent;
   const tag = content.tag ?? 'div';
   const anchor = content.anchor ? ` id="${escapeAttr(content.anchor)}"` : ` id="${escapeAttr(node.id)}"`;
-  const inner = node.children
-    .map((child) => renderNodeToHtml(child, depth + 1, today, formEndpoint))
-    .join('');
+  const inner = node.children.map((child) => renderNodeToHtml(child, depth + 1, ctx)).join('');
   return `<${tag}${anchor} data-crea-id="${escapeAttr(node.id)}"${styleAttr(node)}${attributesFromActions(node.actions)}>${inner}</${tag}>`;
 }
 
@@ -153,6 +157,54 @@ function renderEmbed(node: AnyBlockNode): string {
   return `<div data-crea-id="${escapeAttr(node.id)}" class="crea-embed"${styleAttr(node)}>${content.html ?? ''}</div>`;
 }
 
+/** Symbole conventionnel par devise ; code ISO en repli pour tout le reste. */
+const CURRENCY_SYMBOLS: Record<string, string> = { eur: '€', usd: '$', gbp: '£', chf: 'CHF' };
+
+/**
+ * Format volontairement simple (`toFixed`), sans `Intl.NumberFormat` : le
+ * montant affiche doit rester identique, au caractere pres, a celui envoye a
+ * Stripe pour creer la session de paiement — aucune marge d ambiguite de
+ * regionalisation entre les deux.
+ */
+function formatPrice(amount: number, currency: string): string {
+  const code = (currency || 'eur').toLowerCase();
+  const symbol = CURRENCY_SYMBOLS[code] ?? code.toUpperCase();
+  return `${Math.max(0, amount).toFixed(2)} ${symbol}`;
+}
+
+/** Nom du champ cache portant l identifiant du produit achete. */
+const PRODUCT_ID_FIELD = '_crea_product';
+
+/**
+ * Le paiement est une navigation, comme le formulaire de contact : le clic
+ * poste vers l API, qui cree la session Stripe et redirige le visiteur vers
+ * la page de paiement hebergee par Stripe. Sans `checkoutEndpoint` (site pas
+ * encore publie, ou Stripe non configure par le proprietaire), le bouton est
+ * desactive plutot que de mener vers une erreur.
+ */
+function renderProduct(node: AnyBlockNode, checkoutEndpoint: string | null): string {
+  const content = node.content as ProductContent;
+  const name = escapeHtml(content.name ?? '');
+  const description = escapeHtml(content.description ?? '').replace(/\n/g, '<br />');
+  const price = formatPrice(content.price ?? 0, content.currency ?? 'eur');
+  const image = content.image
+    ? `<img class="crea-product-image" src="${escapeAttr(safeUrl(content.image))}" alt="${escapeAttr(content.name ?? '')}" loading="lazy" />`
+    : '';
+  const disabled = checkoutEndpoint ? '' : ' disabled';
+
+  return (
+    `<div data-crea-id="${escapeAttr(node.id)}" class="crea-product"${styleAttr(node)}>${image}` +
+    `<div class="crea-product-body">` +
+    `<h3 class="crea-product-name">${name}</h3>` +
+    `<p class="crea-product-description">${description}</p>` +
+    `<p class="crea-product-price">${price}</p>` +
+    `<form method="POST" action="${escapeAttr(checkoutEndpoint ?? '#')}" class="crea-product-form">` +
+    `<input type="hidden" name="${PRODUCT_ID_FIELD}" value="${escapeAttr(node.id)}" />` +
+    `<button type="submit" class="crea-product-buy"${disabled}>${escapeHtml(content.buttonLabel ?? 'Acheter')}</button>` +
+    `</form></div></div>`
+  );
+}
+
 function renderCalendar(node: AnyBlockNode, today: Date): string {
   const content = node.content as CalendarContent;
   const months = Math.max(1, Math.min(content.monthsVisible ?? 2, 12));
@@ -202,12 +254,7 @@ function renderCalendar(node: AnyBlockNode, today: Date): string {
 const HONEYPOT_FIELD = '_crea_hp';
 const FORM_ID_FIELD = '_crea_form';
 
-function renderForm(
-  node: AnyBlockNode,
-  depth: number,
-  today: Date,
-  formEndpoint: string | null,
-): string {
+function renderForm(node: AnyBlockNode, depth: number, ctx: RenderCtx): string {
   const content = node.content as FormContent;
   const fields = (content.fields ?? [])
     .map((field) => {
@@ -231,15 +278,13 @@ function renderForm(
     })
     .join('');
 
-  const children = node.children
-    .map((child) => renderNodeToHtml(child, depth + 1, today, formEndpoint))
-    .join('');
+  const children = node.children.map((child) => renderNodeToHtml(child, depth + 1, ctx)).join('');
   const submit = `<button type="submit" class="crea-submit">${escapeHtml(content.submitLabel ?? 'Envoyer')}</button>`;
 
   // Un `endpoint` saisi a la main l emporte — il peut viser un service tiers.
   // Sinon on vise la reception integree, quand l appelant en fournit l adresse.
   const authored = (content.endpoint ?? '').trim();
-  const action = authored && authored !== '#' ? safeUrl(authored) : (formEndpoint ?? '#');
+  const action = authored && authored !== '#' ? safeUrl(authored) : (ctx.formEndpoint ?? '#');
   const method = authored ? (content.method ?? 'POST') : 'POST';
 
   // `aria-hidden` et `tabindex` gardent le piege hors de portee des lecteurs
@@ -260,13 +305,12 @@ function renderForm(
 export function renderNodeToHtml(
   node: AnyBlockNode,
   depth = 0,
-  today = new Date(),
-  formEndpoint: string | null = null,
+  ctx: RenderCtx = { today: new Date(), formEndpoint: null, checkoutEndpoint: null },
 ): string {
   if (depth > 64) return '';
   switch (node.type) {
     case 'container':
-      return renderContainer(node, depth, today, formEndpoint);
+      return renderContainer(node, depth, ctx);
     case 'text':
       return renderText(node);
     case 'media':
@@ -274,11 +318,13 @@ export function renderNodeToHtml(
     case 'button':
       return renderButton(node);
     case 'calendar':
-      return renderCalendar(node, today);
+      return renderCalendar(node, ctx.today);
     case 'form':
-      return renderForm(node, depth, today, formEndpoint);
+      return renderForm(node, depth, ctx);
     case 'embed':
       return renderEmbed(node);
+    case 'product':
+      return renderProduct(node, ctx.checkoutEndpoint);
     default:
       return '';
   }
@@ -304,7 +350,16 @@ button{font:inherit;cursor:pointer;border:none;background:none}
 .crea-field{display:flex;flex-direction:column;gap:6px}
 .crea-field-label{font-size:13px;font-weight:600}
 .crea-field-control{padding:11px 13px;border:1px solid #DDD6C7;border-radius:8px;font:inherit;background:#fff}
-.crea-submit{align-self:flex-start;padding:12px 26px;border-radius:999px;background:#2F4132;color:#fff;font-weight:600}`;
+.crea-submit{align-self:flex-start;padding:12px 26px;border-radius:999px;background:#2F4132;color:#fff;font-weight:600}
+.crea-product{display:flex;flex-direction:column;overflow:hidden}
+.crea-product-image{width:100%;aspect-ratio:4/3;object-fit:cover}
+.crea-product-body{display:flex;flex-direction:column;gap:8px}
+.crea-product-name{margin:0;font-size:18px;font-weight:600}
+.crea-product-description{margin:0;font-size:14px;line-height:1.6;opacity:.8}
+.crea-product-price{margin:0;font-size:16px;font-weight:700}
+.crea-product-form{margin-top:4px}
+.crea-product-buy{padding:12px 24px;border-radius:999px;background:#2F4132;color:#fff;font-weight:600}
+.crea-product-buy:disabled{opacity:.5;cursor:not-allowed}`;
 
 const RUNTIME_JS = `(function(){
   document.addEventListener('click', function(event){
@@ -343,12 +398,23 @@ export interface RenderOptions {
    * part. C est le seul endroit ou cette dependance entre.
    */
   formEndpoint?: string | null;
+  /**
+   * Adresse recevant l achat d un produit ("/p/<adresse>/checkout").
+   * Meme logique que `formEndpoint` : sans elle, le bouton d achat est
+   * desactive plutot que de mener nulle part.
+   */
+  checkoutEndpoint?: string | null;
 }
 
 /** Projection complete : document HTML autonome. */
 export function renderTreeToHtml(tree: PageTree, options: RenderOptions = {}): string {
-  const { includeRuntime = true, today = new Date(), formEndpoint = null } = options;
-  const body = renderNodeToHtml(tree.root, 0, today, formEndpoint);
+  const {
+    includeRuntime = true,
+    today = new Date(),
+    formEndpoint = null,
+    checkoutEndpoint = null,
+  } = options;
+  const body = renderNodeToHtml(tree.root, 0, { today, formEndpoint, checkoutEndpoint });
   const themeVariables = Object.entries(tree.theme.colors)
     .map(([name, value]) => `--crea-${name}:${value}`)
     .join(';');

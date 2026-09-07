@@ -53,6 +53,17 @@ export function planSecrets(existingSecretsOutput, available = {}) {
     });
   }
 
+  // Meme logique que SESSION_SECRET : cle interne, jamais fournie par l
+  // utilisateur, generee une seule fois et jamais recalee — la regenerer
+  // rendrait illisibles les cles Stripe deja chiffrees avec l ancienne.
+  if (!has('PAYMENTS_ENCRYPTION_KEY')) {
+    plan.push({
+      name: 'PAYMENTS_ENCRYPTION_KEY',
+      value: randomBytes(32).toString('base64'),
+      reason: 'genere (32 octets aleatoires)',
+    });
+  }
+
   for (const name of Object.keys(OPTIONAL_SECRETS)) {
     const value = String(available[name] ?? '').trim();
     if (!value) continue;

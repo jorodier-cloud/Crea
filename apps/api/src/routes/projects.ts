@@ -5,6 +5,12 @@ import type { AppBindings } from '../env.js';
 import { badRequest, readJson, requireString } from '../lib/http.js';
 import { requireAuth } from '../middleware/auth.js';
 import {
+  clearPaymentSettings,
+  getPaymentSettings,
+  listOrders,
+  savePaymentSettings,
+} from '../services/payments.js';
+import {
   createProject,
   deleteProject,
   getProject,
@@ -131,4 +137,55 @@ projectRoutes.post('/:id/publish', async (c) => {
 projectRoutes.post('/:id/unpublish', async (c) => {
   const project = await unpublishProject(c.env, c.get('user').id, c.req.param('id'));
   return c.json({ project, publicUrl: null });
+});
+
+/**
+ * Reglages de paiement du projet : etat de connexion Stripe (jamais les cles
+ * elles-memes, meme dechiffrees, une fois enregistrees) et adresse a coller
+ * dans le webhook Stripe pour recevoir les confirmations de paiement.
+ */
+projectRoutes.get('/:id/payments', async (c) => {
+  const id = c.req.param('id');
+  const settings = await getPaymentSettings(c.env, c.get('user').id, id);
+  const webhookUrl = `${new URL(c.req.url).origin}/webhooks/stripe/${id}`;
+  return c.json({ settings, webhookUrl });
+});
+
+/** Connecte ou remplace les cles Stripe du projet. Chiffrees avant stockage. */
+projectRoutes.put('/:id/payments', async (c) => {
+  const body = await readJson<{ publicKey?: unknown; secretKey?: unknown; webhookSecret?: unknown }>(
+    c.req.raw,
+  );
+  const publicKey = requireString(body.publicKey, 'publicKey', { max: 300 });
+  const secretKey = requireString(body.secretKey, 'secretKey', { max: 300 });
+  const webhookSecret = requireString(body.webhookSecret, 'webhookSecret', { max: 300 });
+
+  if (!publicKey.startsWith('pk_')) {
+    throw badRequest('Cle publique Stripe invalide (elle commence par "pk_").');
+  }
+  if (!secretKey.startsWith('sk_') && !secretKey.startsWith('rk_')) {
+    throw badRequest('Cle secrete Stripe invalide (elle commence par "sk_" ou "rk_").');
+  }
+  if (!webhookSecret.startsWith('whsec_')) {
+    throw badRequest('Secret de webhook Stripe invalide (il commence par "whsec_").');
+  }
+
+  const settings = await savePaymentSettings(c.env, c.get('user').id, c.req.param('id'), {
+    publicKey,
+    secretKey,
+    webhookSecret,
+  });
+  return c.json({ settings });
+});
+
+/** Deconnecte Stripe : les commandes deja enregistrees restent consultables. */
+projectRoutes.delete('/:id/payments', async (c) => {
+  await clearPaymentSettings(c.env, c.get('user').id, c.req.param('id'));
+  return c.json({ ok: true });
+});
+
+/** Commandes du projet, les plus recentes en tete. */
+projectRoutes.get('/:id/orders', async (c) => {
+  const orders = await listOrders(c.env, c.get('user').id, c.req.param('id'));
+  return c.json({ orders });
 });
