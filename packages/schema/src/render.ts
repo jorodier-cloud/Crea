@@ -5,6 +5,7 @@ import type {
   ButtonContent,
   CalendarContent,
   ContainerContent,
+  EmbedContent,
   FormContent,
   MediaContent,
   PageTree,
@@ -141,6 +142,17 @@ function pad(value: number): string {
   return value < 10 ? `0${value}` : String(value);
 }
 
+/**
+ * Rendu volontairement sans echappement : `content.html` porte un widget tiers
+ * (script/iframe) que seul le proprietaire du site saisit dans l inspecteur —
+ * jamais l IA (voir ai.ts), jamais un visiteur. Meme frontiere de confiance que
+ * les autres champs reserves au proprietaire (URL d image de fond, CSS custom).
+ */
+function renderEmbed(node: AnyBlockNode): string {
+  const content = node.content as EmbedContent;
+  return `<div data-crea-id="${escapeAttr(node.id)}" class="crea-embed"${styleAttr(node)}>${content.html ?? ''}</div>`;
+}
+
 function renderCalendar(node: AnyBlockNode, today: Date): string {
   const content = node.content as CalendarContent;
   const months = Math.max(1, Math.min(content.monthsVisible ?? 2, 12));
@@ -265,6 +277,8 @@ export function renderNodeToHtml(
       return renderCalendar(node, today);
     case 'form':
       return renderForm(node, depth, today, formEndpoint);
+    case 'embed':
+      return renderEmbed(node);
     default:
       return '';
   }
@@ -275,6 +289,7 @@ body{margin:0}
 img,video{max-width:100%;display:block}
 a{text-decoration:none;color:inherit}
 button{font:inherit;cursor:pointer;border:none;background:none}
+.crea-embed iframe{max-width:100%;border:0}
 .crea-calendar{display:flex;flex-wrap:wrap;gap:24px}
 .crea-cal-month{min-width:240px}
 .crea-cal-label{margin:0 0 10px;font-weight:600;text-transform:capitalize}
