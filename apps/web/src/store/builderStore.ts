@@ -139,7 +139,8 @@ export interface BuilderState {
   save: () => Promise<void>;
   publish: (slug?: string) => Promise<void>;
   unpublish: () => Promise<void>;
-  sendPrompt: (prompt: string) => Promise<void>;
+  /** Renvoie false si la requete a echoue (reseau coupe, IA en arriere-plan...). */
+  sendPrompt: (prompt: string) => Promise<boolean>;
   /** Restaure l arbre tel qu il etait juste avant la reponse donnee. */
   revertMessage: (id: string) => void;
   setPoints: (points: number) => void;
@@ -639,7 +640,12 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
    */
   async sendPrompt(prompt) {
     const { projectId, currentPageId, tree, selectedId, chat, aiPending } = get();
-    if (!projectId || aiPending || prompt.trim().length === 0) return;
+    if (!projectId || aiPending || prompt.trim().length === 0) return false;
+
+    // Capturee ici : si on change de page pendant que l IA travaille, `tree`
+    // et `currentPageId` du store auront change d ici a la reponse. On s en
+    // sert pour ne jamais ecrire le resultat sur la mauvaise page.
+    const requestPageId = currentPageId;
 
     const userMessage: ChatMessage = {
       id: messageId(),
@@ -652,7 +658,7 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
     try {
       const result = await api.aiPrompt({
         projectId,
-        pageId: currentPageId,
+        pageId: requestPageId,
         prompt: prompt.trim(),
         tree,
         selectedNodeId: selectedId,
@@ -662,41 +668,58 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
       // et n a de sens qu en comparaison de l arbre d avant, capture ci-dessus.
       const changedIds = diffChangedNodeIds(tree.root, result.tree.root);
 
-      set((state) => ({
-        tree: result.tree,
-        past: [...state.past, tree].slice(-HISTORY_LIMIT),
-        future: [],
-        dirty: !result.saved,
-        lastSavedAt: result.saved ? Date.now() : state.lastSavedAt,
-        points: result.points.balance,
-        aiPending: false,
-        highlightedIds: changedIds,
-        chat: [
-          ...state.chat,
-          {
-            id: messageId(),
-            role: 'assistant',
-            text:
-              result.message ||
-              (result.applied > 0 ? 'Modifications appliquees.' : 'Aucune modification.'),
-            at: Date.now(),
-            cost: result.points.spent,
-            applied: result.applied,
-            beforeTree: tree,
-            changedIds,
-          },
-          ...(result.errors.length > 0
-            ? [
-                {
-                  id: messageId(),
-                  role: 'system' as const,
-                  text: `Operations ignorees : ${result.errors.join(' ')}`,
-                  at: Date.now(),
-                },
-              ]
-            : []),
-        ],
-      }));
+      set((state) => {
+        // Le serveur a deja enregistre le resultat sur la bonne page (il
+        // recoit toujours pageId, jamais l etat local) : si on a change de
+        // page entre-temps, on range juste le resultat dans `pages` sans
+        // toucher a la page qu on regarde maintenant, plutot que d ecraser
+        // son contenu avec la reponse d une AUTRE page.
+        if (state.currentPageId !== requestPageId) {
+          return {
+            points: result.points.balance,
+            aiPending: false,
+            pages: state.pages.map((page) =>
+              page.id === requestPageId ? { ...page, tree: result.tree } : page,
+            ),
+          };
+        }
+
+        return {
+          tree: result.tree,
+          past: [...state.past, tree].slice(-HISTORY_LIMIT),
+          future: [],
+          dirty: !result.saved,
+          lastSavedAt: result.saved ? Date.now() : state.lastSavedAt,
+          points: result.points.balance,
+          aiPending: false,
+          highlightedIds: changedIds,
+          chat: [
+            ...state.chat,
+            {
+              id: messageId(),
+              role: 'assistant',
+              text:
+                result.message ||
+                (result.applied > 0 ? 'Modifications appliquees.' : 'Aucune modification.'),
+              at: Date.now(),
+              cost: result.points.spent,
+              applied: result.applied,
+              beforeTree: tree,
+              changedIds,
+            },
+            ...(result.errors.length > 0
+              ? [
+                  {
+                    id: messageId(),
+                    role: 'system' as const,
+                    text: `Operations ignorees : ${result.errors.join(' ')}`,
+                    at: Date.now(),
+                  },
+                ]
+              : []),
+          ],
+        };
+      });
 
       // Le clignotement s eteint de lui-meme ; une reponse plus recente qui en
       // aurait deja pose un autre n est jamais effacee par erreur (comparaison
@@ -706,16 +729,27 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
           set((state) => (state.highlightedIds === changedIds ? { highlightedIds: [] } : {}));
         }, 1600);
       }
+      return true;
     } catch (error) {
+      // ApiClientError = le serveur a repondu avec une erreur (message precis
+      // deja lisible). Toute autre exception vient de fetch lui-meme, avant
+      // toute reponse : le cas le plus frequent est la connexion coupee parce
+      // que l onglet est passe en arriere-plan pendant que l IA travaillait.
       const message =
-        error instanceof ApiClientError ? error.message : 'Le moteur IA n a pas repondu.';
-      set((state) => ({
-        aiPending: false,
-        chat: [
-          ...state.chat,
-          { id: messageId(), role: 'system', text: message, at: Date.now() },
-        ],
-      }));
+        error instanceof ApiClientError
+          ? error.message
+          : 'La connexion a ete coupee avant la reponse de l IA (l onglet a peut-etre ete mis en arriere-plan). Votre message est conserve, renvoyez-le.';
+      set((state) => {
+        if (state.currentPageId !== requestPageId) return { aiPending: false };
+        return {
+          aiPending: false,
+          chat: [
+            ...state.chat,
+            { id: messageId(), role: 'system', text: message, at: Date.now() },
+          ],
+        };
+      });
+      return false;
     }
   },
 
